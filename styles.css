@@ -310,11 +310,6 @@ html, body {
   backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--sep);
 }
-.recur-panel {
-  padding: 12px 12px 0;
-  max-height: 62vh;
-  overflow-y: auto;
-}
 .composer { padding: 8px 12px 10px; }
 .composer-row { display: flex; gap: 8px; align-items: center; }
 .composer-foot {
@@ -324,18 +319,6 @@ html, body {
   gap: 6px;
   margin-top: 8px;
 }
-.recur-toggle {
-  flex: none;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: none;
-  border-radius: 15px;
-  cursor: pointer;
-}
-.recur-toggle.on { color: #fff; background: var(--accent); }
 .archive-btn {
   flex: none;
   padding: 6px 14px;

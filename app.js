@@ -35,8 +35,6 @@
   var $titleInput = document.getElementById('titleInput');
   var $prioBtn = document.getElementById('prioBtn');
   var $composerTags = document.getElementById('composerTags');
-  var $recurPanel = document.getElementById('recurPanel');
-  var $recurToggle = document.getElementById('recurToggle');
   var $archiveBtn = document.getElementById('archiveBtn');
   var $toast = document.getElementById('toast');
   var $countOpen = document.getElementById('countOpen');
@@ -690,23 +688,6 @@
     }).finally(function () { loading(false); });
   }
 
-  // メイン画面下部の定期パネル開閉
-  function toggleRecurPanel() {
-    if ($recurPanel.hidden) {
-      $recurPanel.innerHTML = '';
-      $recurPanel.appendChild(buildRecurForm(function () { closeRecurPanel(); }));
-      $recurPanel.hidden = false;
-      $recurToggle.classList.add('on');
-    } else {
-      closeRecurPanel();
-    }
-  }
-  function closeRecurPanel() {
-    $recurPanel.hidden = true;
-    $recurPanel.innerHTML = '';
-    $recurToggle.classList.remove('on');
-  }
-
   // ================= 操作（楽観的更新） =================
   function load() {
     loading(true);
@@ -798,6 +779,7 @@
     api('addRecurring', rec).then(function (d) {
       state.recurring = (d && d.recurring) || state.recurring;
       if (d && d.tasks) state.tasks = d.tasks;
+      if (d && d.archive) state.archive = d.archive;
       render();
       toast('定期タスクを登録しました');
     }).catch(function (e) {
@@ -870,8 +852,6 @@
       $titleInput.focus();
     });
 
-    $recurToggle.addEventListener('click', toggleRecurPanel);
-
     $archiveBtn.addEventListener('click', function () {
       var text = $titleInput.value.trim();
       if (!text) { toast('保管する内容を入力してください'); return; }
@@ -885,7 +865,6 @@
         document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('is-active'); });
         tab.classList.add('is-active');
         state.view = tab.dataset.view;
-        closeRecurPanel();
         render();
       });
     });

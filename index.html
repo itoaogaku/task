@@ -32,9 +32,8 @@
     <div class="empty" id="emptyState" hidden>タスクはありません</div>
     <div class="toast" id="toast" hidden></div>
 
-    <!-- 下部固定ドック（定期パネル + 入力バー） -->
+    <!-- 下部固定ドック（入力バー） -->
     <div class="dock" id="dock">
-      <div class="recur-panel" id="recurPanel" hidden></div>
       <form class="composer" id="composer" autocomplete="off">
         <div class="composer-row">
           <button type="button" class="prio-btn" id="prioBtn" title="優先度">1</button>
@@ -42,7 +41,6 @@
           <button type="submit" class="add-btn" title="追加">＋</button>
         </div>
         <div class="composer-foot">
-          <button type="button" class="recur-toggle" id="recurToggle">＋ 定期タスク</button>
           <button type="button" class="archive-btn" id="archiveBtn">保管</button>
           <div class="composer-tags" id="composerTags"></div>
         </div>

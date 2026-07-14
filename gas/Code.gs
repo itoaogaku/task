@@ -211,7 +211,11 @@ function addRecurring_(params) {
 
     // 期日が本日以前ならその場でタスクを生成
     runRecurringCore_();
-    return { recurring: readRows_(getRecurSheet_(), RECUR_COLUMNS), tasks: readRows_(getSheet_(), COLUMNS) };
+    return {
+      recurring: readRows_(getRecurSheet_(), RECUR_COLUMNS),
+      tasks: readRows_(getSheet_(), COLUMNS),
+      archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS)
+    };
   } finally {
     lock.releaseLock();
   }
@@ -314,14 +318,20 @@ function runRecurringCore_() {
 }
 
 function createTaskFromRecur_(rec) {
-  var sheet = getSheet_();
   var now = now_();
   var task = {
     id: generateId_(), title: rec.title, priority: rec.priority || DEFAULT_PRIORITY,
     status: 'open', assignees: rec.assignees || '', lineMemo: '',
     createdAt: now, doneAt: '', updatedAt: now
   };
-  sheet.appendRow(COLUMNS.map(function (c) { return task[c]; }));
+  getSheet_().appendRow(COLUMNS.map(function (c) { return task[c]; }));
+
+  // 定期タスクの自動生成を保管（記録）にも反映
+  var entry = {
+    id: generateId_(), text: '【定期】' + rec.title, priority: rec.priority || DEFAULT_PRIORITY,
+    assignees: rec.assignees || '', createdAt: now
+  };
+  getArchiveSheet_().appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
 }
 
 // 頻度・月・日から、本日以降の最初の期日（yyyy/MM/dd）を求める
