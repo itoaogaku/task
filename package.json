@@ -1,0 +1,9 @@
+{
+  "name": "task-manager-notion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "スマホ最適化タスク管理アプリ（Notion DB × Vercel）",
+  "engines": {
+    "node": ">=18"
+  }
+}
