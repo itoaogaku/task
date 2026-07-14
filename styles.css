@@ -441,6 +441,20 @@ html, body {
 .recur-add:active { opacity: .85; }
 .recur-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 
+/* サンプル投入ボタン */
+.seed-btn {
+  width: 100%;
+  padding: 11px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+}
+.seed-btn:active { opacity: .7; }
+
 /* ===== トースト ===== */
 .toast {
   position: fixed;

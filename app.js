@@ -341,6 +341,52 @@
       el.appendChild(main);
       group.appendChild(el);
     });
+
+    // サンプルデータ投入（お試し用）
+    var tools = document.createElement('div');
+    tools.style.marginTop = '24px';
+    var seedBtn = document.createElement('button');
+    seedBtn.type = 'button';
+    seedBtn.className = 'seed-btn';
+    seedBtn.textContent = '🧪 サンプルデータを投入';
+    seedBtn.addEventListener('click', seedSampleData);
+    tools.appendChild(seedBtn);
+    var seedNote = document.createElement('div');
+    seedNote.className = 'field-label';
+    seedNote.style.marginTop = '6px';
+    seedNote.textContent = 'お試し用のタスク・定期タスクを追加します（後で削除できます）。';
+    tools.appendChild(seedNote);
+    $list.appendChild(tools);
+  }
+
+  function seedSampleData() {
+    if (!confirm('サンプルのタスク・定期タスクを投入します。よろしいですか？（後で削除できます）')) return;
+    loading(true);
+    var samples = [
+      { title: '請求書を月末までに送付する', priority: 's', assignees: '上司 経理' },
+      { title: '新規提案資料のドラフト作成', priority: 'p1', assignees: 'チームA' },
+      { title: 'A社との打ち合わせ日程を調整', priority: 'p1', assignees: '顧客' },
+      { title: '今月の経費精算を提出', priority: 'p2', assignees: '経理' },
+      { title: '監査対応の資料をそろえる', priority: 'kan', assignees: '上司' },
+      { title: '部長へ週次報告を送る', priority: 'cho', assignees: '部長' },
+      { title: '自宅の電球を買い替える', priority: 'ie', assignees: '' },
+      { title: 'キックオフMTGの議事録を共有', priority: 'p2', assignees: 'チームA チームB' }
+    ];
+    var ids = [];
+    var chain = Promise.resolve();
+    samples.forEach(function (s) {
+      chain = chain.then(function () { return api('add', s); })
+        .then(function (d) { if (d && d.task) ids.push(d.task.id); });
+    });
+    chain = chain
+      .then(function () { if (ids[2]) return api('update', { id: ids[2], lineMemo: '田中さんの15:00のメッセージまで返信済み' }); })
+      .then(function () { if (ids[3]) return api('complete', { id: ids[3] }); })
+      .then(function () { if (ids[7]) return api('complete', { id: ids[7] }); })
+      .then(function () { return api('addRecurring', { title: '家賃の振込', priority: 'p1', freq: 'monthly', month: '', day: 25 }); })
+      .then(function () { return api('addRecurring', { title: '健康診断の予約', priority: 'p2', freq: 'yearly', month: 6, day: 1 }); })
+      .then(function () { toast('サンプルデータを投入しました'); load(); })
+      .catch(function (e) { toast('投入失敗: ' + e.message); })
+      .finally(function () { loading(false); });
   }
 
   // ================= 定期タスク（毎月 / 毎年） =================
