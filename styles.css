@@ -254,8 +254,8 @@ html, body {
   color: var(--muted);
 }
 .chip.line {
-  background: color-mix(in srgb, var(--green) 15%, transparent);
-  color: color-mix(in srgb, var(--green) 88%, var(--text));
+  background: var(--card-2);
+  color: var(--muted);
 }
 .done-time { color: var(--muted); }
 
