@@ -270,7 +270,7 @@ html, body {
 /* ===== 展開エリア（編集） ===== */
 .task-edit {
   border-top: 0.5px solid var(--sep);
-  padding: 12px var(--pad-x) 14px;
+  padding: 12px 16px 16px;
   background: var(--bg);
   display: none;
   gap: 10px;
@@ -312,7 +312,7 @@ html, body {
 
 .memo {
   width: 100%;
-  min-height: 96px;
+  min-height: 190px;
   padding: 8px 10px;
   font-size: 15px;
   color: var(--text);
