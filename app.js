@@ -239,19 +239,25 @@
 
     main.appendChild(badge);
     main.appendChild(title);
-    main.appendChild(doneBtn);
-    main.addEventListener('click', function () { el.classList.toggle('expanded'); });
-    el.appendChild(main);
-
-    if (assignees.length || t.lineMemo || t.status === 'done') {
-      var metaRow = document.createElement('div');
-      metaRow.className = 'task-meta';
+    // 確認先（確認対象者）は完了ボタンのすぐ左に inline 表示
+    if (assignees.length) {
+      var ia = document.createElement('div');
+      ia.className = 'task-assignees';
       assignees.forEach(function (a) {
         var c = document.createElement('span');
         c.className = 'chip';
         c.textContent = a;
-        metaRow.appendChild(c);
+        ia.appendChild(c);
       });
+      main.appendChild(ia);
+    }
+    main.appendChild(doneBtn);
+    main.addEventListener('click', function () { el.classList.toggle('expanded'); });
+    el.appendChild(main);
+
+    if (t.lineMemo || (t.status === 'done' && t.doneAt)) {
+      var metaRow = document.createElement('div');
+      metaRow.className = 'task-meta';
       if (t.lineMemo) {
         var lc = document.createElement('span');
         lc.className = 'chip line';
