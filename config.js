@@ -1,12 +1,11 @@
 // ===== アプリ設定 =====
+// GAS ウェブアプリのデプロイ URL（末尾が /exec のもの）に置き換えてください。
 window.APP_CONFIG = {
-  // バックエンドは同一サイト上の Vercel サーバー関数（/api/tasks）。
-  // Notion トークンはサーバー側の環境変数に保管され、ここには載りません。
-  API_URL: '/api/tasks',
+  // 例: 'https://script.google.com/macros/s/AKfy...../exec'
+  API_URL: 'https://script.google.com/macros/s/AKfycbxRtRA58uTIcqO8XKZZ6cF674kPoz57DePS5XPIEgqA1wBEJG5gacZFW-l1T8lGaUsb0g/exec',
 
-  // 任意の簡易トークン。Vercel の環境変数 APP_TOKEN を設定した場合のみ、
-  // 同じ値をここに入れてください（未設定なら空のままで OK）。
-  TOKEN: '',
+  // GAS の Code.gs の SHARED_TOKEN と同じ値にしてください。
+  TOKEN: 'jaoagpagauzify7aouw',
 
   // 確認対象者のプリセット（@タグ）。自由に増減できます。
   ASSIGNEE_PRESETS: ['@上司', '@先輩', '@チームA', '@チームB', '@顧客', '@自分'],

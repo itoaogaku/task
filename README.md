@@ -1,125 +1,134 @@
-# スマホ最適化タスク管理アプリ（Notion DB × Vercel）
+# スマホ最適化タスク管理アプリ（Google スプレッドシート DB × Vercel）
 
-Notion データベースをバックエンドにした、スマホファーストの高密度タスク管理 SPA です。
-フロントは **HTML + Vanilla JS + CSS**、API は **Vercel サーバー関数**が Notion との読み書きを中継します。
+Google スプレッドシートをデータベースにした、スマホファーストの高密度タスク管理 SPA です。
+フロントは **HTML + Vanilla JS + CSS**（ビルド不要）で Vercel に静的ホスティング、
+バックエンドは **Google Apps Script（GAS）ウェブアプリ**がスプレッドシートとの読み書きを中継します。
 
 ```
-[スマホ ブラウザ (Vercel)]  ⇄  [Vercel サーバー関数 /api/*]  ⇄  [Notion データベース]
+[スマホ ブラウザ (Vercel)]  ⇄  [GAS Web App API]  ⇄  [Google スプレッドシート]
 ```
-
-- Notion トークンは **Vercel の環境変数**に保管され、公開コードには一切含まれません（安全）。
-- 同じ Notion データベースを、**社員は Notion アプリでそのまま閲覧・編集**できます。
 
 ## 機能
 
-- タスクの高速入力＆高密度リスト表示
-- 「完了」で完了タブへ移動し、完了日時を自動記録
-- 優先度 S / 1 / 2 / 3（並び順も優先度順）
-- 確認対象者を @タグ（Notion のマルチセレクト）で選択
-- 「LINE：ここまで確認済み」メモ
-- 定期タスク（毎月／毎年）の自動追加（Vercel Cron で毎日チェック）
+- タスクの高速入力（下部固定バー）＆高密度リスト表示
+- 「完了」ボタン → 即「完了済み」タブへ移動し、完了日時（YYYY/MM/DD hh:mm, JST）を自動記録
+- 優先度（急ぎ/通常/低）をバッジのタップで切り替え
+- 確認対象者を `@上司` `@チームA` などのマークダウン風 @タグで選択・保持
+- 「LINE：ここまで確認済み」専用メモ欄
+- 楽観的更新でローディング待ちを最小化（サクサク動作）
 
 ---
 
-## 1. Notion データベースを用意する
+## 1. スプレッドシートのカラム構成
 
-### 1-1. インテグレーションを作成しトークンを取得
-1. https://www.notion.so/my-integrations を開く
-2. **New integration** → 名前を付けて作成（種類は Internal）
-3. 表示される **Internal Integration Secret（`ntn_...` / `secret_...`）** を控える → これが `NOTION_TOKEN`
+初回アクセス時に GAS が `Tasks` シートとヘッダー行を自動生成します（手動作成も可）。
 
-### 1-2. タスク用データベースを作成
-Notion で新規ページに **データベース（テーブル）** を追加し、次のプロパティ（列）を作成します。**プロパティ名・種類を正確に**合わせてください。
+| 列 | カラム名 | 内容 | 例 |
+|----|-----------|------|-----|
+| A | `id` | タスクの一意 ID（自動生成） | `t1a2b3c...` |
+| B | `title` | タスク本文 | `見積もりを送る` |
+| C | `priority` | 優先度キー | `high` / `mid` / `low` |
+| D | `status` | 状態 | `open` / `done` |
+| E | `assignees` | 確認対象者（@タグをスペース区切り） | `@上司 @チームA` |
+| F | `lineMemo` | LINE 確認済みメモ | `17:30のメッセージまで返信済み` |
+| G | `createdAt` | 作成日時（JST） | `2026/07/13 09:12` |
+| H | `doneAt` | 完了日時（JST。未完了は空） | `2026/07/13 18:40` |
+| I | `updatedAt` | 最終更新日時（JST） | `2026/07/13 18:40` |
 
-| プロパティ名 | 種類 | 選択肢 |
-|---|---|---|
-| `名前` | タイトル | （既定で存在） |
-| `優先度` | セレクト | `S` `1` `2` `3` |
-| `状態` | セレクト | `未完了` `完了` |
-| `確認対象者` | マルチセレクト | （自動追加でOK） |
-| `LINEメモ` | テキスト | |
-| `完了日時` | 日付 | |
+---
 
-> 作成日時はNotion組み込みの「作成日時」を利用するため、列の追加は不要です。
+## 2. バックエンド（Google Apps Script）のセットアップ
 
-### 1-3. 定期タスク用データベースを作成
-もう1つデータベースを作り、次のプロパティを用意します。
+1. タスクを保存したい Google スプレッドシートを新規作成して開く
+2. メニュー **拡張機能 → Apps Script** を開く
+3. `gas/Code.gs` の内容をエディタに貼り付ける
+4. コード先頭の `SHARED_TOKEN` を推測されにくいランダム文字列に変更する
+5. **デプロイ → 新しいデプロイ** を選択
+   - 種類（歯車）: **ウェブアプリ**
+   - 説明: 任意
+   - 次のユーザーとして実行: **自分**
+   - アクセスできるユーザー: **全員**
+6. **デプロイ**をクリックし、承認フローを完了
+7. 発行された **ウェブアプリ URL（末尾が `/exec`）** を控える
 
-| プロパティ名 | 種類 | 選択肢 |
-|---|---|---|
-| `名前` | タイトル | |
-| `優先度` | セレクト | `S` `1` `2` `3` |
-| `確認対象者` | マルチセレクト | |
-| `頻度` | セレクト | `毎月` `毎年` |
-| `月` | 数値 | |
-| `日` | 数値 | |
-| `次回期日` | 日付 | |
-| `有効` | チェックボックス | |
+> コードを修正したら、**デプロイ → デプロイを管理 → 鉛筆アイコン → バージョン「新規」** で再デプロイしてください（URL は変わりません）。
 
-### 1-4. 2つのデータベースをインテグレーションと共有
-各データベースのページを開き、右上 **「•••」→「+ 接続」（Connections）** から、1-1 で作ったインテグレーションを選んで接続します。**これを忘れると 401/権限エラーになります。**
+### セキュリティについて
+- `SHARED_TOKEN` により無差別なアクセスをある程度ブロックできます。ただしトークンはフロントの JS に含まれるため完全な秘匿はできません。より厳密にしたい場合は「アクセスできるユーザー」を Google アカウント限定にする、Cloudflare Workers 等で追加認証を挟む、などを検討してください。
 
-### 1-5. データベース ID を取得
-各データベースを**フルページ**で開き、URL の次の部分をコピーします。
+---
 
+## 3. フロントエンドの設定
+
+`config.js` を編集します。
+
+```js
+window.APP_CONFIG = {
+  API_URL: 'https://script.google.com/macros/s/XXXX/exec', // ← 手順2で控えた URL
+  TOKEN: 'change-me-to-a-random-string',                    // ← Code.gs の SHARED_TOKEN と同じ値
+  ASSIGNEE_PRESETS: ['@上司', '@先輩', '@チームA', '@顧客', '@自分'], // 任意でカスタマイズ
+  PRIORITIES: [
+    { key: 'high', label: '急ぎ' },
+    { key: 'mid',  label: '通常' },
+    { key: 'low',  label: '低' }
+  ]
+};
 ```
-https://www.notion.so/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?v=...
-                       └────────── これが Database ID（32桁）──────────┘
+
+### ローカルで動作確認
+静的ファイルなので簡易サーバーで開けます（`file://` だと fetch が動きません）。
+
+```bash
+cd task-manager
+python3 -m http.server 5173
+# → http://localhost:5173 をスマホ実機やデベロッパーツールのモバイル表示で確認
 ```
 
-- タスク用 → `NOTION_DATABASE_ID`
-- 定期用 → `NOTION_RECUR_DATABASE_ID`
-
 ---
 
-## 2. Vercel に環境変数を設定する
+## 4. Vercel へのデプロイ手順
 
-Vercel のプロジェクト → **Settings → Environment Variables** で以下を追加します（Production / Preview 両方にチェック）。
+このアプリはビルド不要の静的サイトです。`task-manager/` ディレクトリを公開します。
 
-| 変数名 | 値 | 必須 |
-|---|---|---|
-| `NOTION_TOKEN` | 1-1 のトークン | ✅ |
-| `NOTION_DATABASE_ID` | タスク用 DB の ID | ✅ |
-| `NOTION_RECUR_DATABASE_ID` | 定期用 DB の ID | 定期機能を使う場合 |
-| `CRON_SECRET` | 任意のランダム文字列 | 任意（Cron 保護） |
-| `APP_TOKEN` | 任意のランダム文字列 | 任意（簡易アクセス制限） |
+### 方法 A: Vercel ダッシュボード（GitHub 連携）
+1. このリポジトリを GitHub に push
+2. [vercel.com](https://vercel.com) にログイン → **Add New → Project** → リポジトリを Import
+3. **Root Directory** に `task-manager` を指定
+4. Framework Preset: **Other**（Build/Output 設定は空のままで OK）
+5. **Deploy** をクリック → 発行された URL をスマホで開く
 
-> `APP_TOKEN` を設定した場合は、`config.js` の `TOKEN` にも同じ値を入れてください。
+### 方法 B: Vercel CLI
+```bash
+npm i -g vercel
+cd task-manager
+vercel        # 初回。プロンプトに従う（プロジェクト作成）
+vercel --prod # 本番デプロイ
+```
 
-保存後、**Deployments → 最新のデプロイ → ⋯ → Redeploy** で再デプロイすると反映されます。
-
----
-
-## 3. デプロイ構成
-
-- 追加の設定は不要です。`api/` 内のファイルが Vercel の**サーバー関数**として自動的に公開されます。
-- 定期タスクの自動追加は `vercel.json` の `crons` により **毎日 1 回（06:00 JST）** `/api/cron` が実行されます。
-  - 手動で動かしたいときは、ブラウザで `https://あなたのURL/api/cron` を開けばその場で実行されます。
+### デプロイ後
+- 発行 URL をスマホのホーム画面に追加すると、アプリのように使えます
+  （Safari: 共有 → ホーム画面に追加 / Chrome: メニュー → ホーム画面に追加）。
 
 ---
 
 ## トラブルシューティング
 
-| 症状 | 対処 |
-|---|---|
-| `unauthorized` / 401 | データベースをインテグレーションと**共有**したか確認（1-4） |
-| `NOTION_TOKEN ... が未設定です` | Vercel の環境変数を設定し**再デプロイ**したか確認 |
-| プロパティ関連のエラー | DB のプロパティ名・種類が表と一致しているか確認 |
-| 定期タスクが増えない | `NOTION_RECUR_DATABASE_ID` の設定と、Cron の実行を確認 |
+| 症状 | 原因 / 対処 |
+|------|-------------|
+| `unauthorized` | `config.js` の `TOKEN` と `Code.gs` の `SHARED_TOKEN` が不一致 |
+| 読み込み失敗 / CORS エラー | GAS を「アクセスできるユーザー: 全員」で**再デプロイ**しているか確認 |
+| 変更が保存されない | `API_URL` が `/exec` で終わっているか確認（`/dev` は不可） |
+| 完了日時がずれる | `Code.gs` の `TIMEZONE`（既定 `Asia/Tokyo`）を確認 |
 
 ## ファイル構成
 
 ```
-task/
+task-manager/
 ├── index.html      # 画面
 ├── styles.css      # モバイルファースト・高密度スタイル
-├── app.js          # SPA ロジック
-├── config.js       # フロント設定（API URL 等。秘密情報は含まない）
-├── vercel.json     # Vercel 設定（Cron 含む）
-├── package.json
-├── api/
-│   ├── tasks.js    # タスク API（list/add/update/complete/delete/…）
-│   └── cron.js     # 定期タスクの自動追加（毎日実行）
-└── lib/
-    └── notion.js   # Notion API 中継・マッピング・定期ロジック
+├── app.js          # SPA ロジック（楽観的更新・API 通信）
+├── config.js       # API URL / トークン / プリセット設定
+├── vercel.json     # Vercel 設定
+└── gas/
+    └── Code.gs     # Google Apps Script バックエンド
 ```
