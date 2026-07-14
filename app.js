@@ -20,7 +20,8 @@
   var state = {
     tasks: [],
     recurring: [],
-    view: 'open',                 // 'open' | 'done' | 'recurring' | 'settings'
+    archive: [],
+    view: 'open',                 // 'open' | 'done' | 'recurring' | 'settings' | 'archive'
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
     assigneeOptions: loadAssignees()
@@ -36,6 +37,7 @@
   var $composerTags = document.getElementById('composerTags');
   var $recurPanel = document.getElementById('recurPanel');
   var $recurToggle = document.getElementById('recurToggle');
+  var $archiveBtn = document.getElementById('archiveBtn');
   var $toast = document.getElementById('toast');
   var $countOpen = document.getElementById('countOpen');
   var $countDone = document.getElementById('countDone');
@@ -195,6 +197,7 @@
 
     if (state.view === 'recurring') { $empty.hidden = true; renderRecurring($list); return; }
     if (state.view === 'settings') { $empty.hidden = true; renderSettings(); return; }
+    if (state.view === 'archive') { $empty.hidden = true; renderArchive(); return; }
 
     var rows = state.view === 'open' ? open : done;
     $empty.hidden = rows.length !== 0;
@@ -548,6 +551,145 @@
     });
   }
 
+  // ================= 保管（スクロールカレンダー） =================
+  var WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+  function fmtArchiveMonth(m) { // 'yyyy/MM' -> '2026年7月'
+    var p = m.split('/');
+    return (+p[0]) + '年' + (+p[1]) + '月';
+  }
+  function fmtArchiveDay(d) { // 'yyyy/MM/dd' -> '14日 (月)'
+    var p = d.split('/');
+    var dt = new Date(+p[0], (+p[1]) - 1, +p[2]);
+    return (+p[2]) + '日 (' + WEEKDAYS[dt.getDay()] + ')';
+  }
+
+  function renderArchive() {
+    if (!state.archive.length) {
+      var none = document.createElement('div');
+      none.className = 'empty';
+      none.textContent = '保管された記録はありません。タスク入力欄で「保管」を押すとここに残ります。';
+      $list.appendChild(none);
+      return;
+    }
+    var entries = state.archive.slice().sort(function (a, b) {
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+
+    var lastMonth = null, lastDay = null, group = null;
+    entries.forEach(function (e) {
+      var month = (e.createdAt || '').slice(0, 7);  // yyyy/MM
+      var day = (e.createdAt || '').slice(0, 10);    // yyyy/MM/dd
+      if (month && month !== lastMonth) {
+        var mh = document.createElement('div');
+        mh.className = 'arch-month';
+        mh.textContent = fmtArchiveMonth(month);
+        $list.appendChild(mh);
+        lastMonth = month; lastDay = null;
+      }
+      if (day && day !== lastDay) {
+        var dh = document.createElement('div');
+        dh.className = 'arch-day';
+        dh.textContent = fmtArchiveDay(day);
+        $list.appendChild(dh);
+        group = document.createElement('div');
+        group.className = 'group';
+        $list.appendChild(group);
+        lastDay = day;
+      }
+      group.appendChild(archiveEntryEl(e));
+    });
+  }
+
+  function archiveEntryEl(e) {
+    var meta = prioMeta(e.priority);
+    var assignees = parseAssignees(e.assignees);
+    var el = document.createElement('div');
+    el.className = 'task';
+
+    var main = document.createElement('div');
+    main.className = 'task-main';
+
+    var time = document.createElement('span');
+    time.className = 'arch-time';
+    time.textContent = (e.createdAt || '').slice(11, 16);
+
+    var badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.style.setProperty('--c', meta.color);
+    badge.textContent = meta.label;
+
+    var text = document.createElement('div');
+    text.className = 'task-title';
+    text.textContent = e.text;
+
+    var del = document.createElement('button');
+    del.className = 'done-btn';
+    del.style.background = 'var(--muted)';
+    del.textContent = '×';
+    del.title = '記録を削除';
+    del.addEventListener('click', function () {
+      if (confirm('この記録を削除しますか？')) removeArchive(e);
+    });
+
+    main.appendChild(time);
+    main.appendChild(badge);
+    main.appendChild(text);
+    main.appendChild(del);
+    el.appendChild(main);
+
+    if (assignees.length) {
+      var metaRow = document.createElement('div');
+      metaRow.className = 'task-meta';
+      assignees.forEach(function (a) {
+        var c = document.createElement('span');
+        c.className = 'chip';
+        c.textContent = a;
+        metaRow.appendChild(c);
+      });
+      el.appendChild(metaRow);
+    }
+    return el;
+  }
+
+  function addArchive(text) {
+    var tempId = 'tmp-' + Date.now();
+    var entry = {
+      id: tempId, text: text, priority: state.composerPriority,
+      assignees: state.composerAssignees.join(' '), createdAt: nowLocal()
+    };
+    state.archive.unshift(entry);
+    if (state.view === 'archive') render();
+    toast('保管しました');
+
+    loading(true);
+    api('addArchive', { text: text, priority: entry.priority, assignees: entry.assignees, createdAt: entry.createdAt })
+      .then(function (d) {
+        if (d && d.archive) {
+          var idx = state.archive.map(function (x) { return x.id; }).indexOf(tempId);
+          if (idx >= 0) state.archive[idx] = d.archive;
+        }
+        if (state.view === 'archive') render();
+      })
+      .catch(function (e) {
+        state.archive = state.archive.filter(function (x) { return x.id !== tempId; });
+        if (state.view === 'archive') render();
+        toast('保管失敗: ' + e.message);
+      })
+      .finally(function () { loading(false); });
+  }
+
+  function removeArchive(e) {
+    var backup = state.archive.slice();
+    state.archive = state.archive.filter(function (x) { return x.id !== e.id; });
+    render();
+    loading(true);
+    api('deleteArchive', { id: e.id }).catch(function (err) {
+      state.archive = backup;
+      render();
+      toast('削除失敗: ' + err.message);
+    }).finally(function () { loading(false); });
+  }
+
   // メイン画面下部の定期パネル開閉
   function toggleRecurPanel() {
     if ($recurPanel.hidden) {
@@ -571,6 +713,7 @@
     api('list').then(function (d) {
       state.tasks = (d && d.tasks) || [];
       state.recurring = (d && d.recurring) || [];
+      state.archive = (d && d.archive) || [];
       render();
     }).catch(function (e) {
       toast('読み込み失敗: ' + e.message);
@@ -728,6 +871,14 @@
     });
 
     $recurToggle.addEventListener('click', toggleRecurPanel);
+
+    $archiveBtn.addEventListener('click', function () {
+      var text = $titleInput.value.trim();
+      if (!text) { toast('保管する内容を入力してください'); return; }
+      addArchive(text);
+      $titleInput.value = '';
+      $titleInput.focus();
+    });
 
     document.querySelectorAll('.tab').forEach(function (tab) {
       tab.addEventListener('click', function () {

@@ -24,6 +24,7 @@
 // ===== 設定 =====
 var SHEET_NAME = 'Tasks';
 var RECUR_SHEET = 'Recurring';
+var ARCHIVE_SHEET = 'Archive';
 var TIMEZONE = 'Asia/Tokyo';
 var DEFAULT_PRIORITY = 'p1';
 // 簡易アクセストークン（フロントの config.js の TOKEN と一致させる）
@@ -32,6 +33,7 @@ var SHARED_TOKEN = 'jaoagpagauzify7aouw';
 // 列定義（この順序でシートに保存される）
 var COLUMNS = ['id', 'title', 'priority', 'status', 'assignees', 'lineMemo', 'createdAt', 'doneAt', 'updatedAt'];
 var RECUR_COLUMNS = ['id', 'title', 'priority', 'assignees', 'freq', 'month', 'day', 'nextDue', 'active', 'createdAt'];
+var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt'];
 
 // ===== エントリポイント =====
 function doGet(e) {
@@ -68,6 +70,8 @@ function handle_(e, params) {
       case 'delete':          result = deleteTask_(params.id); break;
       case 'addRecurring':    result = addRecurring_(params); break;
       case 'deleteRecurring': result = deleteRecurring_(params.id); break;
+      case 'addArchive':      result = addArchive_(params); break;
+      case 'deleteArchive':   result = deleteArchive_(params.id); break;
       default:
         return json_({ ok: false, error: 'unknown action: ' + action });
     }
@@ -79,7 +83,11 @@ function handle_(e, params) {
 
 // ===== 各アクション =====
 function listAll_() {
-  return { tasks: readRows_(getSheet_(), COLUMNS), recurring: readRows_(getRecurSheet_(), RECUR_COLUMNS) };
+  return {
+    tasks: readRows_(getSheet_(), COLUMNS),
+    recurring: readRows_(getRecurSheet_(), RECUR_COLUMNS),
+    archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS)
+  };
 }
 
 function readRows_(sheet, cols) {
@@ -224,6 +232,42 @@ function deleteRecurring_(id) {
   }
 }
 
+// ===== 保管（アーカイブ / 記録） =====
+function addArchive_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var sheet = getArchiveSheet_();
+    var entry = {
+      id: generateId_(),
+      text: String(params.text || '').trim(),
+      priority: params.priority || DEFAULT_PRIORITY,
+      assignees: String(params.assignees || ''),
+      createdAt: params.createdAt ? String(params.createdAt) : now_()
+    };
+    if (!entry.text) throw new Error('text is required');
+    sheet.appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
+    return { archive: entry };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteArchive_(id) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var sheet = getArchiveSheet_();
+    var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+    for (var r = 1; r < ids.length; r++) {
+      if (String(ids[r][0]) === String(id)) { sheet.deleteRow(r + 1); return { id: id }; }
+    }
+    throw new Error('archive not found: ' + id);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // 毎日1回のトリガーから呼ばれるエントリポイント
 function runRecurring() {
   var lock = LockService.getScriptLock();
@@ -341,6 +385,10 @@ function getSheet_() {
 
 function getRecurSheet_() {
   return ensureSheet_(RECUR_SHEET, RECUR_COLUMNS);
+}
+
+function getArchiveSheet_() {
+  return ensureSheet_(ARCHIVE_SHEET, ARCHIVE_COLUMNS);
 }
 
 function ensureSheet_(name, cols) {
