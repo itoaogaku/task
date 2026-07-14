@@ -231,7 +231,11 @@ html, body {
   max-width: 46%;
   overflow: hidden;
 }
-.task-assignees .chip { white-space: nowrap; }
+.task-assignees .chip {
+  white-space: nowrap;
+  font-size: 10.5px;
+  padding: 1px 6px;
+}
 
 /* メタ行（LINEメモ・完了日時） */
 .task-meta {
