@@ -123,6 +123,19 @@
     return str.split(/\s+/).filter(Boolean);
   }
 
+  // 確認先の並び順（確認先タブの順）。複数なら最上位、未設定は末尾。
+  function assigneeRank(t) {
+    var names = parseAssignees(t.assignees);
+    if (!names.length) return 100000;
+    var min = 100000;
+    names.forEach(function (n) {
+      var i = state.assigneeOptions.indexOf(n);
+      if (i < 0) i = 10000; // リスト外の確認先は既知の後・未設定の前
+      if (i < min) min = i;
+    });
+    return min;
+  }
+
   // ================= 優先度メニュー（上に開く選択リスト） =================
   var $menuBackdrop = null, $prioMenu = null;
   function closePrioMenu() {
@@ -182,7 +195,9 @@
 
     open.sort(function (a, b) {
       var d = prioMeta(a.priority).index - prioMeta(b.priority).index;
-      if (d !== 0) return d;
+      if (d !== 0) return d;                     // まず優先度順
+      var ra = assigneeRank(a), rb = assigneeRank(b);
+      if (ra !== rb) return ra - rb;             // 次に確認先順（確認先タブの並び）
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
     done.sort(function (a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); });
