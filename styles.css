@@ -24,6 +24,11 @@
 
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+
+  /* 表示領域の最大幅（広い画面ではここまで広がる） */
+  --app-max: 900px;
+  /* 左右の余白（狭めにして表示領域を広く） */
+  --pad-x: 10px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -76,7 +81,7 @@ html, body {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
-  max-width: 560px;
+  max-width: var(--app-max);
   margin: 0 auto;
 }
 
@@ -88,7 +93,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: calc(8px + var(--safe-top)) 14px 8px;
+  padding: calc(8px + var(--safe-top)) var(--pad-x) 8px;
   background: var(--header-bg);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
@@ -144,7 +149,7 @@ html, body {
 /* ===== リスト（グループ化インセット） ===== */
 .list {
   flex: 1;
-  padding: 14px 14px 92px;
+  padding: 10px var(--pad-x) 92px;
 }
 .empty {
   padding: 60px 16px;
@@ -302,7 +307,7 @@ html, body {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   z-index: 30;
-  max-width: 560px;
+  max-width: var(--app-max);
   margin: 0 auto;
   padding-bottom: var(--safe-bottom);
   background: var(--header-bg);
@@ -310,7 +315,7 @@ html, body {
   backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--sep);
 }
-.composer { padding: 8px 12px 10px; }
+.composer { padding: 8px var(--pad-x) 10px; }
 .composer-row { display: flex; gap: 8px; align-items: center; }
 .composer-foot {
   display: flex;
