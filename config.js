@@ -13,10 +13,10 @@ window.APP_CONFIG = {
   // 優先度の定義（配列の上から順に優先度が高い＝並び順もこの順）。
   // key: 内部値 / label: 表示 / color: バッジ色
   PRIORITIES: [
-    { key: 's',  label: 'S', color: '#dc2626' },
-    { key: 'p1', label: '1', color: '#f59e0b' },
-    { key: 'p2', label: '2', color: '#3b82f6' },
-    { key: 'p3', label: '3', color: '#64748b' }
+    { key: 's',  label: 'S', color: '#ff3b30' },
+    { key: 'p1', label: '1', color: '#ff9500' },
+    { key: 'p2', label: '2', color: '#007aff' },
+    { key: 'p3', label: '3', color: '#8e8e93' }
   ],
 
   // 新規タスクの初期優先度（key）。

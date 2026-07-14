@@ -137,7 +137,12 @@
 
     var rows = state.view === 'open' ? open : done;
     $empty.hidden = rows.length !== 0;
-    rows.forEach(function (t) { $list.appendChild(taskEl(t)); });
+    if (rows.length) {
+      var group = document.createElement('div');
+      group.className = 'group';
+      rows.forEach(function (t) { group.appendChild(taskEl(t)); });
+      $list.appendChild(group);
+    }
   }
 
   function taskEl(t) {
@@ -153,7 +158,7 @@
 
     var badge = document.createElement('span');
     badge.className = 'badge';
-    badge.style.background = meta.color;
+    badge.style.setProperty('--c', meta.color);
     badge.textContent = meta.label;
     badge.title = '優先度を変更';
     badge.addEventListener('click', function (e) {
@@ -310,7 +315,7 @@
     function refreshPrio() {
       var m = prioMeta(opts.priority);
       prioBtn.textContent = m.label;
-      prioBtn.style.background = m.color;
+      prioBtn.style.setProperty('--c', m.color);
     }
     refreshPrio();
     prioBtn.addEventListener('click', function () { opts.priority = nextPriority(opts.priority); refreshPrio(); });
@@ -385,6 +390,9 @@
       $list.appendChild(none);
       return;
     }
+    var group = document.createElement('div');
+    group.className = 'group';
+    $list.appendChild(group);
     state.recurring.forEach(function (r) {
       var m = prioMeta(r.priority);
       var el = document.createElement('div');
@@ -394,7 +402,7 @@
 
       var badge = document.createElement('span');
       badge.className = 'badge';
-      badge.style.background = m.color;
+      badge.style.setProperty('--c', m.color);
       badge.textContent = m.label;
 
       var body = document.createElement('div');
@@ -421,7 +429,7 @@
       main.appendChild(body);
       main.appendChild(del);
       el.appendChild(main);
-      $list.appendChild(el);
+      group.appendChild(el);
     });
   }
 
@@ -552,7 +560,7 @@
   function updatePrioBtn() {
     var m = prioMeta(state.composerPriority);
     $prioBtn.textContent = m.label;
-    $prioBtn.style.background = m.color;
+    $prioBtn.style.setProperty('--c', m.color);
   }
 
   function buildComposerTags() {
