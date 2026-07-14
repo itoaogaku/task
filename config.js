@@ -13,11 +13,12 @@ window.APP_CONFIG = {
   // 優先度の定義（配列の上から順に優先度が高い＝並び順もこの順）。
   // key: 内部値 / label: 表示 / color: バッジ色
   PRIORITIES: [
+    { key: 'l',  label: 'L', color: '#34c759' },
     { key: 's',  label: 'S', color: '#ff3b30' },
     { key: 'p1', label: '1', color: '#ff9500' },
     { key: 'p2', label: '2', color: '#007aff' },
     { key: 'kan', label: '監', color: '#af52de' },
-    { key: 'cho', label: '長', color: '#34c759' },
+    { key: 'cho', label: '長', color: '#30b0c7' },
     { key: 'ie',  label: '家', color: '#5856d6' }
   ],
 
