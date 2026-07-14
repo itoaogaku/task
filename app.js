@@ -6,9 +6,9 @@
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
+    { key: 'kan', label: '監', color: '#af52de' },
     { key: 'p1', label: '1', color: '#ff9500' },
     { key: 'p2', label: '2', color: '#007aff' },
-    { key: 'kan', label: '監', color: '#af52de' },
     { key: 'cho', label: '長', color: '#30b0c7' },
     { key: 'ie', label: '家', color: '#5856d6' }
   ];
