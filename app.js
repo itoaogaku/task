@@ -261,7 +261,7 @@
       if (t.lineMemo) {
         var lc = document.createElement('span');
         lc.className = 'chip line';
-        lc.textContent = 'LINE: ' + t.lineMemo;
+        lc.textContent = '詳細: ' + t.lineMemo;
         metaRow.appendChild(lc);
       }
       if (t.status === 'done' && t.doneAt) {
@@ -304,10 +304,10 @@
 
     var lLabel = document.createElement('div');
     lLabel.className = 'field-label';
-    lLabel.textContent = 'LINE：ここまで確認/返信済みメモ';
+    lLabel.textContent = '詳細';
     var memo = document.createElement('textarea');
     memo.className = 'memo';
-    memo.placeholder = '例: 〇〇さんの17:30のメッセージまで返信済み';
+    memo.placeholder = '詳細メモ（自由記入）';
     memo.value = t.lineMemo || '';
     memo.addEventListener('blur', function () {
       if (memo.value !== (t.lineMemo || '')) saveField(t, { lineMemo: memo.value });
