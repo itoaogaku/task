@@ -297,7 +297,7 @@
         var i = selected.indexOf(name);
         if (i >= 0) { selected.splice(i, 1); tag.classList.remove('on'); }
         else { selected.push(name); tag.classList.add('on'); }
-        saveField(t, { assignees: selected.join(' ') });
+        // 「保存」ボタンでまとめて確定するため、ここでは保存しない
       });
       tagRow.appendChild(tag);
     });
@@ -309,8 +309,24 @@
     memo.className = 'memo';
     memo.placeholder = '詳細メモ（自由記入）';
     memo.value = t.lineMemo || '';
-    memo.addEventListener('blur', function () {
-      if (memo.value !== (t.lineMemo || '')) saveField(t, { lineMemo: memo.value });
+
+    // 保存ボタン（確認先・詳細をまとめて確定）
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'save-btn';
+    saveBtn.textContent = '保存';
+    saveBtn.addEventListener('click', function () {
+      var changed = {};
+      var newAssignees = selected.join(' ');
+      if (newAssignees !== (t.assignees || '')) changed.assignees = newAssignees;
+      if (memo.value !== (t.lineMemo || '')) changed.lineMemo = memo.value;
+      if (Object.keys(changed).length) {
+        saveField(t, changed); // 保存後は再描画でパネルが閉じる
+      } else {
+        var host = wrap.closest ? wrap.closest('.task') : null;
+        if (host) host.classList.remove('expanded');
+      }
+      toast('保存しました');
     });
 
     var actions = document.createElement('div');
@@ -337,6 +353,7 @@
     wrap.appendChild(tagRow);
     wrap.appendChild(lLabel);
     wrap.appendChild(memo);
+    wrap.appendChild(saveBtn);
     wrap.appendChild(actions);
     return wrap;
   }
