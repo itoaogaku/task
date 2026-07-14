@@ -270,13 +270,15 @@ html, body {
 /* ===== 展開エリア（編集） ===== */
 .task-edit {
   border-top: 0.5px solid var(--sep);
-  margin: 0 0 0 12px;
-  padding: 10px 14px 12px 0;
+  padding: 12px var(--pad-x) 14px;
+  background: var(--bg);
   display: none;
   gap: 10px;
   flex-direction: column;
 }
 .task.expanded .task-edit { display: flex; }
+/* 開いているタスク行も少し色を変えて連続感を出す */
+.task.expanded .task-main { background: var(--card-2); }
 
 .field-label {
   font-size: 11px;
