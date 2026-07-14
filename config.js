@@ -10,10 +10,15 @@ window.APP_CONFIG = {
   // 確認対象者のプリセット（@タグ）。自由に増減できます。
   ASSIGNEE_PRESETS: ['@上司', '@先輩', '@チームA', '@チームB', '@顧客', '@自分'],
 
-  // 優先度の定義（key と表示ラベル・色）。
+  // 優先度の定義（配列の上から順に優先度が高い＝並び順もこの順）。
+  // key: 内部値 / label: 表示 / color: バッジ色
   PRIORITIES: [
-    { key: 'high', label: '急ぎ' },
-    { key: 'mid',  label: '通常' },
-    { key: 'low',  label: '低' }
-  ]
+    { key: 's',  label: 'S', color: '#dc2626' },
+    { key: 'p1', label: '1', color: '#f59e0b' },
+    { key: 'p2', label: '2', color: '#3b82f6' },
+    { key: 'p3', label: '3', color: '#64748b' }
+  ],
+
+  // 新規タスクの初期優先度（key）。
+  DEFAULT_PRIORITY: 'p1'
 };

@@ -16,7 +16,10 @@
           未完了 <span class="tab-count" id="countOpen">0</span>
         </button>
         <button class="tab" data-view="done" role="tab">
-          完了済み <span class="tab-count" id="countDone">0</span>
+          完了 <span class="tab-count" id="countDone">0</span>
+        </button>
+        <button class="tab" data-view="recurring" role="tab">
+          定期 <span class="tab-count" id="countRecurring">0</span>
         </button>
       </div>
       <button class="icon-btn" id="reloadBtn" title="再読み込み" aria-label="再読み込み">⟳</button>
@@ -30,7 +33,7 @@
     <!-- 下部固定の入力バー -->
     <form class="composer" id="composer" autocomplete="off">
       <div class="composer-row">
-        <button type="button" class="prio-btn" id="prioBtn" title="優先度">急ぎ</button>
+        <button type="button" class="prio-btn" id="prioBtn" title="優先度">1</button>
         <input class="composer-input" id="titleInput" placeholder="タスクを入力して追加…" required />
         <button type="submit" class="add-btn" title="追加">＋</button>
       </div>

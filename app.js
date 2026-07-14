@@ -4,16 +4,23 @@
 
   var CFG = window.APP_CONFIG || {};
   var PRIORITIES = CFG.PRIORITIES || [
-    { key: 'high', label: '急ぎ' }, { key: 'mid', label: '通常' }, { key: 'low', label: '低' }
+    { key: 's', label: 'S', color: '#dc2626' },
+    { key: 'p1', label: '1', color: '#f59e0b' },
+    { key: 'p2', label: '2', color: '#3b82f6' },
+    { key: 'p3', label: '3', color: '#64748b' }
   ];
+  var DEFAULT_PRIORITY = CFG.DEFAULT_PRIORITY || (PRIORITIES[0] && PRIORITIES[0].key) || 's';
   var PRESETS = CFG.ASSIGNEE_PRESETS || [];
+  // 旧優先度キー → 新キーの読み替え（過去データ対応）
+  var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'p3' };
 
   // ---- 状態 ----
   var state = {
     tasks: [],
-    view: 'open',          // 'open' | 'done'
-    composerPriority: 'high',
-    composerAssignees: []  // 追加フォームで選択中の @タグ
+    recurring: [],
+    view: 'open',                 // 'open' | 'done' | 'recurring'
+    composerPriority: DEFAULT_PRIORITY,
+    composerAssignees: []         // 追加フォームで選択中の @タグ
   };
 
   // ---- DOM 参照 ----
@@ -26,6 +33,7 @@
   var $toast = document.getElementById('toast');
   var $countOpen = document.getElementById('countOpen');
   var $countDone = document.getElementById('countDone');
+  var $countRecurring = document.getElementById('countRecurring');
 
   // ================= API =================
   function api(action, payload) {
@@ -76,26 +84,27 @@
     toastTimer = setTimeout(function () { $toast.hidden = true; }, 2200);
   }
 
-  // ================= ユーティリティ =================
-  function prioLabel(key) {
-    var p = PRIORITIES.filter(function (x) { return x.key === key; })[0];
-    return p ? p.label : key;
+  // ================= 優先度ユーティリティ =================
+  function prioIndexOf(key) {
+    for (var i = 0; i < PRIORITIES.length; i++) if (PRIORITIES[i].key === key) return i;
+    return -1;
   }
-  function prioClass(key) {
-    return key === 'high' ? 'high' : (key === 'low' ? 'low' : 'mid');
+  // 優先度メタ（未知キー・旧キーも吸収）: {label, color, index}
+  function prioMeta(key) {
+    var idx = prioIndexOf(key);
+    if (idx < 0 && LEGACY_PRIORITY[key]) idx = prioIndexOf(LEGACY_PRIORITY[key]);
+    if (idx < 0) return { label: key || '?', color: '#64748b', index: PRIORITIES.length };
+    var p = PRIORITIES[idx];
+    return { label: p.label, color: p.color || '#64748b', index: idx };
   }
   function nextPriority(key) {
-    var order = ['high', 'mid', 'low'];
-    return order[(order.indexOf(key) + 1) % order.length];
+    var m = prioMeta(key);
+    var next = m.index >= PRIORITIES.length ? 0 : (m.index + 1) % PRIORITIES.length;
+    return PRIORITIES[next].key;
   }
   function parseAssignees(str) {
     if (!str) return [];
     return str.split(/\s+/).filter(Boolean);
-  }
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
   }
 
   // ================= レンダリング =================
@@ -104,19 +113,36 @@
     var done = state.tasks.filter(function (t) { return t.status === 'done'; });
     $countOpen.textContent = open.length;
     $countDone.textContent = done.length;
+    if ($countRecurring) $countRecurring.textContent = state.recurring.length;
 
-    // 完了済みは完了日時の新しい順
+    // 未完了：優先度順（S→1→2→3）、同順位は新しい順
+    open.sort(function (a, b) {
+      var d = prioMeta(a.priority).index - prioMeta(b.priority).index;
+      if (d !== 0) return d;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+    // 完了済み：完了日時の新しい順
     done.sort(function (a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); });
+
+    // 入力バーは定期タブでは隠す
+    $composer.style.display = state.view === 'recurring' ? 'none' : '';
+
+    $list.innerHTML = '';
+
+    if (state.view === 'recurring') {
+      $empty.hidden = true;
+      renderRecurring();
+      return;
+    }
 
     var rows = state.view === 'open' ? open : done;
     $empty.hidden = rows.length !== 0;
-
-    $list.innerHTML = '';
     rows.forEach(function (t) { $list.appendChild(taskEl(t)); });
   }
 
   function taskEl(t) {
     var assignees = parseAssignees(t.assignees);
+    var meta = prioMeta(t.priority);
     var el = document.createElement('div');
     el.className = 'task' + (t.status === 'done' ? ' done' : '');
     el.dataset.id = t.id;
@@ -126,8 +152,9 @@
     main.className = 'task-main';
 
     var badge = document.createElement('span');
-    badge.className = 'badge ' + prioClass(t.priority);
-    badge.textContent = prioLabel(t.priority);
+    badge.className = 'badge';
+    badge.style.background = meta.color;
+    badge.textContent = meta.label;
     badge.title = '優先度を変更';
     badge.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -155,27 +182,27 @@
 
     // --- メタ行（要約） ---
     if (assignees.length || t.lineMemo || t.status === 'done') {
-      var meta = document.createElement('div');
-      meta.className = 'task-meta';
+      var metaRow = document.createElement('div');
+      metaRow.className = 'task-meta';
       assignees.forEach(function (a) {
         var c = document.createElement('span');
         c.className = 'chip';
         c.textContent = a;
-        meta.appendChild(c);
+        metaRow.appendChild(c);
       });
       if (t.lineMemo) {
         var lc = document.createElement('span');
         lc.className = 'chip line';
         lc.textContent = 'LINE: ' + t.lineMemo;
-        meta.appendChild(lc);
+        metaRow.appendChild(lc);
       }
       if (t.status === 'done' && t.doneAt) {
         var dc = document.createElement('span');
         dc.className = 'done-time';
         dc.textContent = '完了 ' + t.doneAt;
-        meta.appendChild(dc);
+        metaRow.appendChild(dc);
       }
-      el.appendChild(meta);
+      el.appendChild(metaRow);
     }
 
     // --- 展開編集エリア ---
@@ -250,11 +277,160 @@
     return wrap;
   }
 
+  // ================= 定期タスク（毎月 / 毎年） =================
+  function scheduleText(r) {
+    if (r.freq === 'yearly') return '毎年 ' + (+r.month) + '月' + (+r.day) + '日';
+    return '毎月 ' + (+r.day) + '日';
+  }
+
+  function renderRecurring() {
+    // --- 追加フォーム ---
+    var form = document.createElement('div');
+    form.className = 'recur-form';
+
+    var hint = document.createElement('div');
+    hint.className = 'field-label';
+    hint.textContent = '設定した日付になると、未完了タスクへ自動で追加されます';
+    form.appendChild(hint);
+
+    // タイトル
+    var titleInput = document.createElement('input');
+    titleInput.className = 'composer-input';
+    titleInput.placeholder = '定期タスク名（例: 家賃の振込）';
+    form.appendChild(titleInput);
+
+    // 優先度 + 頻度 の行
+    var opts = { priority: DEFAULT_PRIORITY, freq: 'monthly' };
+    var row = document.createElement('div');
+    row.className = 'recur-row';
+
+    var prioBtn = document.createElement('button');
+    prioBtn.type = 'button';
+    prioBtn.className = 'prio-btn';
+    function refreshPrio() {
+      var m = prioMeta(opts.priority);
+      prioBtn.textContent = m.label;
+      prioBtn.style.background = m.color;
+    }
+    refreshPrio();
+    prioBtn.addEventListener('click', function () { opts.priority = nextPriority(opts.priority); refreshPrio(); });
+
+    var freqMonthly = document.createElement('button');
+    var freqYearly = document.createElement('button');
+    freqMonthly.type = freqYearly.type = 'button';
+    freqMonthly.className = 'seg on'; freqMonthly.textContent = '毎月';
+    freqYearly.className = 'seg'; freqYearly.textContent = '毎年';
+
+    row.appendChild(prioBtn);
+    row.appendChild(freqMonthly);
+    row.appendChild(freqYearly);
+    form.appendChild(row);
+
+    // 日付指定の行
+    var dateRow = document.createElement('div');
+    dateRow.className = 'recur-row';
+    var monthWrap = document.createElement('label');
+    monthWrap.className = 'num-field';
+    monthWrap.style.display = 'none';
+    var monthInput = document.createElement('input');
+    monthInput.type = 'number'; monthInput.min = '1'; monthInput.max = '12'; monthInput.value = '1';
+    monthWrap.appendChild(monthInput);
+    monthWrap.appendChild(document.createTextNode('月'));
+
+    var dayWrap = document.createElement('label');
+    dayWrap.className = 'num-field';
+    var dayInput = document.createElement('input');
+    dayInput.type = 'number'; dayInput.min = '1'; dayInput.max = '31'; dayInput.value = '1';
+    dayWrap.appendChild(dayInput);
+    dayWrap.appendChild(document.createTextNode('日'));
+
+    dateRow.appendChild(monthWrap);
+    dateRow.appendChild(dayWrap);
+    form.appendChild(dateRow);
+
+    function setFreq(f) {
+      opts.freq = f;
+      freqMonthly.className = 'seg' + (f === 'monthly' ? ' on' : '');
+      freqYearly.className = 'seg' + (f === 'yearly' ? ' on' : '');
+      monthWrap.style.display = f === 'yearly' ? '' : 'none';
+    }
+    freqMonthly.addEventListener('click', function () { setFreq('monthly'); });
+    freqYearly.addEventListener('click', function () { setFreq('yearly'); });
+
+    // 追加ボタン
+    var addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'recur-add';
+    addBtn.textContent = '＋ 定期タスクを登録';
+    addBtn.addEventListener('click', function () {
+      var title = titleInput.value.trim();
+      if (!title) { toast('定期タスク名を入力してください'); return; }
+      addRecurring({
+        title: title,
+        priority: opts.priority,
+        freq: opts.freq,
+        month: opts.freq === 'yearly' ? (+monthInput.value || 1) : '',
+        day: +dayInput.value || 1
+      });
+    });
+    form.appendChild(addBtn);
+    $list.appendChild(form);
+
+    // --- 一覧 ---
+    if (!state.recurring.length) {
+      var none = document.createElement('div');
+      none.className = 'empty';
+      none.style.padding = '24px 8px';
+      none.textContent = '登録された定期タスクはありません';
+      $list.appendChild(none);
+      return;
+    }
+    state.recurring.forEach(function (r) {
+      var m = prioMeta(r.priority);
+      var el = document.createElement('div');
+      el.className = 'task';
+      var main = document.createElement('div');
+      main.className = 'task-main';
+
+      var badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.style.background = m.color;
+      badge.textContent = m.label;
+
+      var body = document.createElement('div');
+      body.className = 'task-title';
+      body.innerHTML = '';
+      var t1 = document.createElement('div');
+      t1.textContent = r.title;
+      var t2 = document.createElement('div');
+      t2.className = 'recur-sub';
+      t2.textContent = scheduleText(r) + '　/　次回 ' + (r.nextDue || '-');
+      body.appendChild(t1);
+      body.appendChild(t2);
+
+      var del = document.createElement('button');
+      del.className = 'done-btn';
+      del.style.background = 'var(--muted)';
+      del.textContent = '×';
+      del.title = '定期タスクを削除';
+      del.addEventListener('click', function () {
+        if (confirm('この定期タスクを削除しますか？')) removeRecurring(r);
+      });
+
+      main.appendChild(badge);
+      main.appendChild(body);
+      main.appendChild(del);
+      el.appendChild(main);
+      $list.appendChild(el);
+    });
+  }
+
   // ================= 操作（楽観的更新） =================
   function load() {
     loading(true);
     api('list').then(function (d) {
       state.tasks = (d && d.tasks) || [];
+      state.recurring = (d && d.recurring) || [];
       render();
     }).catch(function (e) {
       toast('読み込み失敗: ' + e.message);
@@ -266,7 +442,7 @@
     var task = {
       id: tempId, title: title, priority: state.composerPriority, status: 'open',
       assignees: state.composerAssignees.join(' '), lineMemo: '',
-      createdAt: '', doneAt: '', updatedAt: ''
+      createdAt: nowLocal(), doneAt: '', updatedAt: ''
     };
     state.tasks.unshift(task);   // 即座に画面へ
     render();
@@ -275,7 +451,6 @@
     api('add', {
       title: title, priority: task.priority, assignees: task.assignees
     }).then(function (d) {
-      // 仮 ID を本物に置き換え
       var real = d.task;
       var idx = state.tasks.map(function (x) { return x.id; }).indexOf(tempId);
       if (idx >= 0) state.tasks[idx] = real;
@@ -296,7 +471,6 @@
     api(toDone ? 'complete' : 'uncomplete', { id: t.id }).then(function (d) {
       mergeTask(d.task);
     }).catch(function (e) {
-      // ロールバック
       t.status = toDone ? 'open' : 'done';
       t.doneAt = toDone ? '' : t.doneAt;
       render();
@@ -337,6 +511,30 @@
     }).finally(function () { loading(false); });
   }
 
+  function addRecurring(rec) {
+    loading(true);
+    api('addRecurring', rec).then(function (d) {
+      state.recurring = (d && d.recurring) || state.recurring;
+      if (d && d.tasks) state.tasks = d.tasks; // 当日分が即追加された場合に反映
+      render();
+      toast('定期タスクを登録しました');
+    }).catch(function (e) {
+      toast('登録失敗: ' + e.message);
+    }).finally(function () { loading(false); });
+  }
+
+  function removeRecurring(r) {
+    var backup = state.recurring.slice();
+    state.recurring = state.recurring.filter(function (x) { return x.id !== r.id; });
+    render();
+    loading(true);
+    api('deleteRecurring', { id: r.id }).catch(function (e) {
+      state.recurring = backup;
+      render();
+      toast('削除失敗: ' + e.message);
+    }).finally(function () { loading(false); });
+  }
+
   function mergeTask(task) {
     if (!task) return;
     var idx = state.tasks.map(function (x) { return x.id; }).indexOf(task.id);
@@ -352,10 +550,9 @@
 
   // ================= 入力バー / タブ =================
   function updatePrioBtn() {
-    var cls = prioClass(state.composerPriority);
-    var colors = { high: '#ef4444', mid: '#f59e0b', low: '#64748b' };
-    $prioBtn.textContent = prioLabel(state.composerPriority);
-    $prioBtn.style.background = colors[cls];
+    var m = prioMeta(state.composerPriority);
+    $prioBtn.textContent = m.label;
+    $prioBtn.style.background = m.color;
   }
 
   function buildComposerTags() {
@@ -386,7 +583,7 @@
       if (!title) return;
       addTask(title);
       $titleInput.value = '';
-      $titleInput.focus(); // 連続入力しやすく
+      $titleInput.focus();
     });
 
     document.querySelectorAll('.tab').forEach(function (tab) {
