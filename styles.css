@@ -441,6 +441,37 @@ html, body {
 .recur-add:active { opacity: .85; }
 .recur-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 
+/* ===== 優先度メニュー（上に開く選択リスト） ===== */
+.menu-backdrop { position: fixed; inset: 0; z-index: 60; }
+.prio-menu {
+  position: fixed;
+  z-index: 61;
+  min-width: 148px;
+  padding: 5px;
+  background: var(--card);
+  border: 0.5px solid var(--sep);
+  border-radius: 13px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
+}
+.prio-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+.prio-item:active { background: var(--card-2); }
+.prio-item.sel { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.prio-dot { width: 13px; height: 13px; border-radius: 50%; flex: none; }
+.prio-item-label { flex: 1; text-align: left; font-weight: 600; }
+.prio-check { color: var(--accent); font-size: 14px; font-weight: 700; }
+
 /* ===== トースト ===== */
 .toast {
   position: fixed;

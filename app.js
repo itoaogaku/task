@@ -123,6 +123,55 @@
     return str.split(/\s+/).filter(Boolean);
   }
 
+  // ================= 優先度メニュー（上に開く選択リスト） =================
+  var $menuBackdrop = null, $prioMenu = null;
+  function closePrioMenu() {
+    if ($prioMenu) { $prioMenu.remove(); $prioMenu = null; }
+    if ($menuBackdrop) { $menuBackdrop.remove(); $menuBackdrop = null; }
+  }
+  function openPrioMenu(anchor, currentKey, onSelect) {
+    closePrioMenu();
+    $menuBackdrop = document.createElement('div');
+    $menuBackdrop.className = 'menu-backdrop';
+    $menuBackdrop.addEventListener('click', closePrioMenu);
+    $prioMenu = document.createElement('div');
+    $prioMenu.className = 'prio-menu';
+    PRIORITIES.forEach(function (p) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'prio-item' + (p.key === currentKey ? ' sel' : '');
+      var dot = document.createElement('span');
+      dot.className = 'prio-dot';
+      dot.style.background = p.color;
+      var lbl = document.createElement('span');
+      lbl.className = 'prio-item-label';
+      lbl.textContent = p.label;
+      item.appendChild(dot);
+      item.appendChild(lbl);
+      if (p.key === currentKey) {
+        var ck = document.createElement('span');
+        ck.className = 'prio-check';
+        ck.textContent = '✓';
+        item.appendChild(ck);
+      }
+      item.addEventListener('click', function () { closePrioMenu(); onSelect(p.key); });
+      $prioMenu.appendChild(item);
+    });
+    document.body.appendChild($menuBackdrop);
+    document.body.appendChild($prioMenu);
+    positionMenu($prioMenu, anchor);
+  }
+  function positionMenu(menu, anchor) {
+    var r = anchor.getBoundingClientRect();
+    var mh = menu.offsetHeight, mw = menu.offsetWidth;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var left = Math.min(Math.max(8, r.left), vw - mw - 8);
+    var top = r.top - mh - 6;                               // 上に開く
+    if (top < 8) top = Math.min(r.bottom + 6, vh - mh - 8); // 上が狭ければ下に
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
+
   // ================= レンダリング =================
   function render() {
     var open = state.tasks.filter(function (t) { return t.status !== 'done'; });
@@ -172,7 +221,10 @@
     badge.style.setProperty('--c', meta.color);
     badge.textContent = meta.label;
     badge.title = '優先度を変更';
-    badge.addEventListener('click', function (e) { e.stopPropagation(); cyclePriority(t); });
+    badge.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openPrioMenu(badge, t.priority, function (key) { setTaskPriority(t, key); });
+    });
 
     var title = document.createElement('div');
     title.className = 'task-title';
@@ -377,7 +429,9 @@
       prioBtn.style.setProperty('--c', m.color);
     }
     refreshPrio();
-    prioBtn.addEventListener('click', function () { opts.priority = nextPriority(opts.priority); refreshPrio(); });
+    prioBtn.addEventListener('click', function () {
+      openPrioMenu(prioBtn, opts.priority, function (key) { opts.priority = key; refreshPrio(); });
+    });
 
     var freqMonthly = document.createElement('button');
     var freqYearly = document.createElement('button');
@@ -564,11 +618,10 @@
     }).finally(function () { loading(false); });
   }
 
-  function cyclePriority(t) {
+  function setTaskPriority(t, key) {
+    if (key === t.priority) return;
     var prev = t.priority;
-    t.priority = nextPriority(t.priority);
-    render();
-    saveField(t, { priority: t.priority }, function () { t.priority = prev; render(); });
+    saveField(t, { priority: key }, function () { t.priority = prev; render(); });
   }
 
   function saveField(t, fields, onError) {
@@ -659,8 +712,10 @@
 
   function bindEvents() {
     $prioBtn.addEventListener('click', function () {
-      state.composerPriority = nextPriority(state.composerPriority);
-      updatePrioBtn();
+      openPrioMenu($prioBtn, state.composerPriority, function (key) {
+        state.composerPriority = key;
+        updatePrioBtn();
+      });
     });
 
     $composer.addEventListener('submit', function (e) {
