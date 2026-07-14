@@ -521,6 +521,16 @@ html, body {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+.arch-date {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  padding: 2px 2px;
+  min-width: 0;
+}
 
 /* ===== 優先度メニュー（上に開く選択リスト） ===== */
 .menu-backdrop { position: fixed; inset: 0; z-index: 60; }

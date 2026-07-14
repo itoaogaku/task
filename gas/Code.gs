@@ -71,6 +71,7 @@ function handle_(e, params) {
       case 'addRecurring':    result = addRecurring_(params); break;
       case 'deleteRecurring': result = deleteRecurring_(params.id); break;
       case 'addArchive':      result = addArchive_(params); break;
+      case 'updateArchive':   result = updateArchive_(params); break;
       case 'deleteArchive':   result = deleteArchive_(params.id); break;
       default:
         return json_({ ok: false, error: 'unknown action: ' + action });
@@ -252,6 +253,35 @@ function addArchive_(params) {
     if (!entry.text) throw new Error('text is required');
     sheet.appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
     return { archive: entry };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateArchive_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var sheet = getArchiveSheet_();
+    var last = sheet.getLastRow();
+    var ids = sheet.getRange(1, 1, last, 1).getValues();
+    for (var r = 1; r < ids.length; r++) {
+      if (String(ids[r][0]) === String(params.id)) {
+        var rowIndex = r + 1;
+        var vals = sheet.getRange(rowIndex, 1, 1, ARCHIVE_COLUMNS.length).getValues()[0];
+        var entry = {};
+        for (var c = 0; c < ARCHIVE_COLUMNS.length; c++) {
+          entry[ARCHIVE_COLUMNS[c]] = vals[c] != null ? String(vals[c]) : '';
+        }
+        ['text', 'priority', 'assignees', 'createdAt'].forEach(function (k) {
+          if (params[k] !== undefined) entry[k] = String(params[k]);
+        });
+        sheet.getRange(rowIndex, 1, 1, ARCHIVE_COLUMNS.length)
+             .setValues([ARCHIVE_COLUMNS.map(function (col) { return entry[col]; })]);
+        return { archive: entry };
+      }
+    }
+    throw new Error('archive not found: ' + params.id);
   } finally {
     lock.releaseLock();
   }

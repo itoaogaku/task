@@ -38,9 +38,6 @@
   var $composerTags = document.getElementById('composerTags');
   var $archiveBtn = document.getElementById('archiveBtn');
   var $toast = document.getElementById('toast');
-  var $countOpen = document.getElementById('countOpen');
-  var $countDone = document.getElementById('countDone');
-  var $countRecurring = document.getElementById('countRecurring');
 
   // ================= 確認対象者リスト（端末に保存） =================
   function loadAssignees() {
@@ -198,9 +195,6 @@
   function render() {
     var open = state.tasks.filter(function (t) { return t.status !== 'done'; });
     var done = state.tasks.filter(function (t) { return t.status === 'done'; });
-    $countOpen.textContent = open.length;
-    $countDone.textContent = done.length;
-    if ($countRecurring) $countRecurring.textContent = state.recurring.length;
 
     open.sort(function (a, b) {
       var d = prioMeta(a.priority).index - prioMeta(b.priority).index;
@@ -596,16 +590,14 @@
     });
   }
 
-  // ================= 保管（スクロールカレンダー） =================
-  var WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
-  function fmtArchiveMonth(m) { // 'yyyy/MM' -> '2026年7月'
-    var p = m.split('/');
-    return (+p[0]) + '年' + (+p[1]) + '月';
+  // ================= 保管（スクロールカレンダー 1/1〜12/31・年をまたいで統合） =================
+  function mmddKey(createdAt) { return (createdAt || '').slice(5, 10); } // 'MM/dd'
+  function fmtMMDD(createdAt) { // 'yyyy/MM/dd HH:mm' -> 'M月D日'
+    var mm = mmddKey(createdAt).split('/');
+    return (+mm[0]) + '月' + (+mm[1]) + '日';
   }
-  function fmtArchiveDay(d) { // 'yyyy/MM/dd' -> '14日 (月)'
-    var p = d.split('/');
-    var dt = new Date(+p[0], (+p[1]) - 1, +p[2]);
-    return (+p[2]) + '日 (' + WEEKDAYS[dt.getDay()] + ')';
+  function toDateInputValue(createdAt) { // -> 'yyyy-MM-dd'
+    return (createdAt || '').slice(0, 10).replace(/\//g, '-');
   }
 
   function renderArchive() {
@@ -616,30 +608,25 @@
       $list.appendChild(none);
       return;
     }
+    // 月日（MM/dd）で並べ替え：1/1 → 12/31。同じ日付内は新しい順。
     var entries = state.archive.slice().sort(function (a, b) {
+      var ka = mmddKey(a.createdAt), kb = mmddKey(b.createdAt);
+      if (ka !== kb) return ka < kb ? -1 : 1;
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
 
-    var lastMonth = null, lastDay = null, group = null;
+    var lastKey = null, group = null;
     entries.forEach(function (e) {
-      var month = (e.createdAt || '').slice(0, 7);  // yyyy/MM
-      var day = (e.createdAt || '').slice(0, 10);    // yyyy/MM/dd
-      if (month && month !== lastMonth) {
-        var mh = document.createElement('div');
-        mh.className = 'arch-month';
-        mh.textContent = fmtArchiveMonth(month);
-        $list.appendChild(mh);
-        lastMonth = month; lastDay = null;
-      }
-      if (day && day !== lastDay) {
+      var key = mmddKey(e.createdAt);
+      if (key !== lastKey) {
         var dh = document.createElement('div');
         dh.className = 'arch-day';
-        dh.textContent = fmtArchiveDay(day);
+        dh.textContent = fmtMMDD(e.createdAt);
         $list.appendChild(dh);
         group = document.createElement('div');
         group.className = 'group';
         $list.appendChild(group);
-        lastDay = day;
+        lastKey = key;
       }
       group.appendChild(archiveEntryEl(e));
     });
@@ -654,10 +641,6 @@
     var main = document.createElement('div');
     main.className = 'task-main';
 
-    var time = document.createElement('span');
-    time.className = 'arch-time';
-    time.textContent = (e.createdAt || '').slice(11, 16);
-
     var badge = document.createElement('span');
     badge.className = 'badge';
     badge.style.setProperty('--c', meta.color);
@@ -666,6 +649,18 @@
     var text = document.createElement('div');
     text.className = 'task-title';
     text.textContent = e.text;
+
+    // 日付変更（タップで日付ピッカー）
+    var dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.className = 'arch-date';
+    dateInput.value = toDateInputValue(e.createdAt);
+    dateInput.title = '日付を変更';
+    dateInput.addEventListener('change', function () {
+      if (!dateInput.value) return;
+      var time = (e.createdAt || '').slice(11, 16) || '00:00';
+      updateArchiveDate(e, dateInput.value.replace(/-/g, '/') + ' ' + time);
+    });
 
     var del = document.createElement('button');
     del.className = 'done-btn';
@@ -676,9 +671,9 @@
       if (confirm('この記録を削除しますか？')) removeArchive(e);
     });
 
-    main.appendChild(time);
     main.appendChild(badge);
     main.appendChild(text);
+    main.appendChild(dateInput);
     main.appendChild(del);
     el.appendChild(main);
 
@@ -694,6 +689,23 @@
       el.appendChild(metaRow);
     }
     return el;
+  }
+
+  function updateArchiveDate(e, newCreated) {
+    var prev = e.createdAt;
+    e.createdAt = newCreated;
+    render();
+    loading(true);
+    api('updateArchive', { id: e.id, createdAt: newCreated }).then(function (d) {
+      if (d && d.archive) {
+        var idx = state.archive.map(function (x) { return x.id; }).indexOf(e.id);
+        if (idx >= 0) state.archive[idx] = d.archive;
+      }
+    }).catch(function (err) {
+      e.createdAt = prev;
+      render();
+      toast('日付変更に失敗: ' + err.message);
+    }).finally(function () { loading(false); });
   }
 
   function addArchive(text) {
@@ -902,7 +914,8 @@
     $archiveBtn.addEventListener('click', function () {
       var text = $titleInput.value.trim();
       if (!text) { toast('保管する内容を入力してください'); return; }
-      addArchive(text);
+      addTask(text);      // タスクとして追加
+      addArchive(text);   // 同じ内容を保管にも格納
       $titleInput.value = '';
       $titleInput.focus();
     });
