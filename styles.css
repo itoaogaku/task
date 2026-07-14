@@ -282,7 +282,17 @@ html, body {
   margin-bottom: 4px;
   text-transform: none;
 }
-.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tag-row::-webkit-scrollbar { display: none; }
+.tag-row .tag { flex: none; }
 .tag {
   padding: 4px 11px;
   font-size: 12.5px;
