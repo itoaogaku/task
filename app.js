@@ -175,13 +175,19 @@
     positionMenu($prioMenu, anchor);
   }
   function positionMenu(menu, anchor) {
-    var r = anchor.getBoundingClientRect();
+    // どのバッジから開いても、入力バー（ドック）のすぐ上・左寄せの固定位置に表示
     var mh = menu.offsetHeight, mw = menu.offsetWidth;
-    var vw = window.innerWidth;
-    // 横：押したバッジの中央の真上に
-    var left = Math.min(Math.max(6, r.left + r.width / 2 - mw / 2), vw - mw - 6);
-    // 縦：常にバッジのすぐ上に開く（画面上端は超えない）
-    var top = r.top - mh - 6;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dock = document.getElementById('dock');
+    var bottomLimit = vh - 8;
+    if (dock && dock.style.display !== 'none') {
+      var dr = dock.getBoundingClientRect();
+      if (dr.height) bottomLimit = dr.top - 8;
+    }
+    var app = document.querySelector('.app');
+    var ar = app ? app.getBoundingClientRect() : { left: 0 };
+    var left = Math.min(Math.max(6, ar.left + 10), vw - mw - 6);
+    var top = bottomLimit - mh;
     if (top < 6) top = 6;
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
