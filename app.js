@@ -4,36 +4,54 @@
 
   var CFG = window.APP_CONFIG || {};
   var PRIORITIES = CFG.PRIORITIES || [
-    { key: 's', label: 'S', color: '#dc2626' },
-    { key: 'p1', label: '1', color: '#f59e0b' },
-    { key: 'p2', label: '2', color: '#3b82f6' },
-    { key: 'p3', label: '3', color: '#64748b' }
+    { key: 's', label: 'S', color: '#ff3b30' },
+    { key: 'p1', label: '1', color: '#ff9500' },
+    { key: 'p2', label: '2', color: '#007aff' },
+    { key: 'kan', label: '監', color: '#af52de' },
+    { key: 'cho', label: '長', color: '#34c759' },
+    { key: 'ie', label: '家', color: '#5856d6' }
   ];
   var DEFAULT_PRIORITY = CFG.DEFAULT_PRIORITY || (PRIORITIES[0] && PRIORITIES[0].key) || 's';
-  var PRESETS = CFG.ASSIGNEE_PRESETS || [];
   // 旧優先度キー → 新キーの読み替え（過去データ対応）
-  var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'p3' };
+  var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'ie', p3: 'ie' };
+  var ASSIGNEE_STORE = 'assignee_options_v1';
 
   // ---- 状態 ----
   var state = {
     tasks: [],
     recurring: [],
-    view: 'open',                 // 'open' | 'done' | 'recurring'
+    view: 'open',                 // 'open' | 'done' | 'recurring' | 'settings'
     composerPriority: DEFAULT_PRIORITY,
-    composerAssignees: []         // 追加フォームで選択中の @タグ
+    composerAssignees: [],        // 追加フォームで選択中の確認対象者
+    assigneeOptions: loadAssignees()
   };
 
   // ---- DOM 参照 ----
   var $list = document.getElementById('taskList');
   var $empty = document.getElementById('emptyState');
+  var $dock = document.getElementById('dock');
   var $composer = document.getElementById('composer');
   var $titleInput = document.getElementById('titleInput');
   var $prioBtn = document.getElementById('prioBtn');
   var $composerTags = document.getElementById('composerTags');
+  var $recurPanel = document.getElementById('recurPanel');
+  var $recurToggle = document.getElementById('recurToggle');
   var $toast = document.getElementById('toast');
   var $countOpen = document.getElementById('countOpen');
   var $countDone = document.getElementById('countDone');
   var $countRecurring = document.getElementById('countRecurring');
+
+  // ================= 確認対象者リスト（端末に保存） =================
+  function loadAssignees() {
+    try {
+      var s = localStorage.getItem(ASSIGNEE_STORE);
+      if (s) { var a = JSON.parse(s); if (Array.isArray(a)) return a; }
+    } catch (e) { /* noop */ }
+    return (CFG.ASSIGNEE_PRESETS || []).slice();
+  }
+  function saveAssignees() {
+    try { localStorage.setItem(ASSIGNEE_STORE, JSON.stringify(state.assigneeOptions)); } catch (e) { /* noop */ }
+  }
 
   // ================= API =================
   function api(action, payload) {
@@ -45,7 +63,6 @@
       var url = CFG.API_URL + '?action=list&token=' + encodeURIComponent(CFG.TOKEN);
       return fetch(url, { method: 'GET' }).then(parseRes);
     }
-    // 変更系は text/plain の "単純リクエスト" にして CORS プリフライトを回避
     return fetch(CFG.API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -62,7 +79,7 @@
     });
   }
 
-  // ================= ローディング表示 =================
+  // ================= ローディング / トースト =================
   var loadingCount = 0, $bar = null;
   function loading(on) {
     loadingCount += on ? 1 : -1;
@@ -89,13 +106,12 @@
     for (var i = 0; i < PRIORITIES.length; i++) if (PRIORITIES[i].key === key) return i;
     return -1;
   }
-  // 優先度メタ（未知キー・旧キーも吸収）: {label, color, index}
   function prioMeta(key) {
     var idx = prioIndexOf(key);
     if (idx < 0 && LEGACY_PRIORITY[key]) idx = prioIndexOf(LEGACY_PRIORITY[key]);
-    if (idx < 0) return { label: key || '?', color: '#64748b', index: PRIORITIES.length };
+    if (idx < 0) return { label: key || '?', color: '#8e8e93', index: PRIORITIES.length };
     var p = PRIORITIES[idx];
-    return { label: p.label, color: p.color || '#64748b', index: idx };
+    return { label: p.label, color: p.color || '#8e8e93', index: idx };
   }
   function nextPriority(key) {
     var m = prioMeta(key);
@@ -115,25 +131,21 @@
     $countDone.textContent = done.length;
     if ($countRecurring) $countRecurring.textContent = state.recurring.length;
 
-    // 未完了：優先度順（S→1→2→3）、同順位は新しい順
     open.sort(function (a, b) {
       var d = prioMeta(a.priority).index - prioMeta(b.priority).index;
       if (d !== 0) return d;
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
-    // 完了済み：完了日時の新しい順
     done.sort(function (a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); });
 
-    // 入力バーは定期タブでは隠す
-    $composer.style.display = state.view === 'recurring' ? 'none' : '';
+    // 入力ドックはタスク一覧（未完了/完了）でのみ表示
+    var showDock = state.view === 'open' || state.view === 'done';
+    $dock.style.display = showDock ? '' : 'none';
 
     $list.innerHTML = '';
 
-    if (state.view === 'recurring') {
-      $empty.hidden = true;
-      renderRecurring();
-      return;
-    }
+    if (state.view === 'recurring') { $empty.hidden = true; renderRecurring($list); return; }
+    if (state.view === 'settings') { $empty.hidden = true; renderSettings(); return; }
 
     var rows = state.view === 'open' ? open : done;
     $empty.hidden = rows.length !== 0;
@@ -152,7 +164,6 @@
     el.className = 'task' + (t.status === 'done' ? ' done' : '');
     el.dataset.id = t.id;
 
-    // --- メイン行 ---
     var main = document.createElement('div');
     main.className = 'task-main';
 
@@ -161,10 +172,7 @@
     badge.style.setProperty('--c', meta.color);
     badge.textContent = meta.label;
     badge.title = '優先度を変更';
-    badge.addEventListener('click', function (e) {
-      e.stopPropagation();
-      cyclePriority(t);
-    });
+    badge.addEventListener('click', function (e) { e.stopPropagation(); cyclePriority(t); });
 
     var title = document.createElement('div');
     title.className = 'task-title';
@@ -174,10 +182,7 @@
     doneBtn.className = 'done-btn';
     doneBtn.textContent = t.status === 'done' ? '↩' : '✓';
     doneBtn.title = t.status === 'done' ? '未完了に戻す' : '完了';
-    doneBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggleComplete(t);
-    });
+    doneBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleComplete(t); });
 
     main.appendChild(badge);
     main.appendChild(title);
@@ -185,7 +190,6 @@
     main.addEventListener('click', function () { el.classList.toggle('expanded'); });
     el.appendChild(main);
 
-    // --- メタ行（要約） ---
     if (assignees.length || t.lineMemo || t.status === 'done') {
       var metaRow = document.createElement('div');
       metaRow.className = 'task-meta';
@@ -210,7 +214,6 @@
       el.appendChild(metaRow);
     }
 
-    // --- 展開編集エリア ---
     el.appendChild(editEl(t));
     return el;
   }
@@ -219,15 +222,14 @@
     var wrap = document.createElement('div');
     wrap.className = 'task-edit';
 
-    // 確認対象者（@タグ）
     var selected = parseAssignees(t.assignees);
     var aLabel = document.createElement('div');
     aLabel.className = 'field-label';
-    aLabel.textContent = '確認対象者（マークダウン @タグ）';
+    aLabel.textContent = '確認対象者';
     var tagRow = document.createElement('div');
     tagRow.className = 'tag-row';
-    var presetUnion = PRESETS.concat(selected.filter(function (s) { return PRESETS.indexOf(s) < 0; }));
-    presetUnion.forEach(function (name) {
+    var union = state.assigneeOptions.concat(selected.filter(function (s) { return state.assigneeOptions.indexOf(s) < 0; }));
+    union.forEach(function (name) {
       var tag = document.createElement('button');
       tag.type = 'button';
       tag.className = 'tag' + (selected.indexOf(name) >= 0 ? ' on' : '');
@@ -241,7 +243,6 @@
       tagRow.appendChild(tag);
     });
 
-    // LINE 確認済みメモ
     var lLabel = document.createElement('div');
     lLabel.className = 'field-label';
     lLabel.textContent = 'LINE：ここまで確認/返信済みメモ';
@@ -253,7 +254,6 @@
       if (memo.value !== (t.lineMemo || '')) saveField(t, { lineMemo: memo.value });
     });
 
-    // アクション（タイトル編集 / 削除）
     var actions = document.createElement('div');
     actions.className = 'edit-actions';
     var editTitleBtn = document.createElement('button');
@@ -282,14 +282,75 @@
     return wrap;
   }
 
+  // ================= 確認先タブ（確認対象者の管理） =================
+  function renderSettings() {
+    var card = document.createElement('div');
+    card.className = 'recur-form';
+
+    var hint = document.createElement('div');
+    hint.className = 'field-label';
+    hint.textContent = '確認対象者を追加・削除できます。ここの相手はタスク編集や入力時に選べます。';
+    card.appendChild(hint);
+
+    var row = document.createElement('div');
+    row.className = 'recur-row';
+    var input = document.createElement('input');
+    input.className = 'composer-input';
+    input.placeholder = '名前を入力（例: 山田課長）';
+    var add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'seg on';
+    add.textContent = '追加';
+    function doAdd() {
+      var v = input.value.trim();
+      if (!v) return;
+      if (state.assigneeOptions.indexOf(v) < 0) { state.assigneeOptions.push(v); saveAssignees(); buildComposerTags(); }
+      input.value = '';
+      render();
+    }
+    add.addEventListener('click', doAdd);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
+    row.appendChild(input);
+    row.appendChild(add);
+    card.appendChild(row);
+    $list.appendChild(card);
+
+    if (!state.assigneeOptions.length) return;
+    var group = document.createElement('div');
+    group.className = 'group';
+    $list.appendChild(group);
+    state.assigneeOptions.forEach(function (name) {
+      var el = document.createElement('div');
+      el.className = 'task';
+      var main = document.createElement('div');
+      main.className = 'task-main';
+      var title = document.createElement('div');
+      title.className = 'task-title';
+      title.textContent = name;
+      var del = document.createElement('button');
+      del.className = 'done-btn';
+      del.style.background = 'var(--muted)';
+      del.textContent = '×';
+      del.title = '削除';
+      del.addEventListener('click', function () {
+        state.assigneeOptions = state.assigneeOptions.filter(function (x) { return x !== name; });
+        saveAssignees(); buildComposerTags(); render();
+      });
+      main.appendChild(title);
+      main.appendChild(del);
+      el.appendChild(main);
+      group.appendChild(el);
+    });
+  }
+
   // ================= 定期タスク（毎月 / 毎年） =================
   function scheduleText(r) {
     if (r.freq === 'yearly') return '毎年 ' + (+r.month) + '月' + (+r.day) + '日';
     return '毎月 ' + (+r.day) + '日';
   }
 
-  function renderRecurring() {
-    // --- 追加フォーム ---
+  // 定期タスク入力フォームを生成（メイン画面のパネルと定期タブで共用）
+  function buildRecurForm(onDone) {
     var form = document.createElement('div');
     form.className = 'recur-form';
 
@@ -298,13 +359,11 @@
     hint.textContent = '設定した日付になると、未完了タスクへ自動で追加されます';
     form.appendChild(hint);
 
-    // タイトル
     var titleInput = document.createElement('input');
     titleInput.className = 'composer-input';
     titleInput.placeholder = '定期タスク名（例: 家賃の振込）';
     form.appendChild(titleInput);
 
-    // 優先度 + 頻度 の行
     var opts = { priority: DEFAULT_PRIORITY, freq: 'monthly' };
     var row = document.createElement('div');
     row.className = 'recur-row';
@@ -331,7 +390,6 @@
     row.appendChild(freqYearly);
     form.appendChild(row);
 
-    // 日付指定の行
     var dateRow = document.createElement('div');
     dateRow.className = 'recur-row';
     var monthWrap = document.createElement('label');
@@ -362,7 +420,6 @@
     freqMonthly.addEventListener('click', function () { setFreq('monthly'); });
     freqYearly.addEventListener('click', function () { setFreq('yearly'); });
 
-    // 追加ボタン
     var addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'recur-add';
@@ -377,22 +434,27 @@
         month: opts.freq === 'yearly' ? (+monthInput.value || 1) : '',
         day: +dayInput.value || 1
       });
+      titleInput.value = '';
+      if (onDone) onDone();
     });
     form.appendChild(addBtn);
-    $list.appendChild(form);
+    return form;
+  }
 
-    // --- 一覧 ---
+  function renderRecurring(container) {
+    container.appendChild(buildRecurForm(null));
+
     if (!state.recurring.length) {
       var none = document.createElement('div');
       none.className = 'empty';
       none.style.padding = '24px 8px';
       none.textContent = '登録された定期タスクはありません';
-      $list.appendChild(none);
+      container.appendChild(none);
       return;
     }
     var group = document.createElement('div');
     group.className = 'group';
-    $list.appendChild(group);
+    container.appendChild(group);
     state.recurring.forEach(function (r) {
       var m = prioMeta(r.priority);
       var el = document.createElement('div');
@@ -407,7 +469,6 @@
 
       var body = document.createElement('div');
       body.className = 'task-title';
-      body.innerHTML = '';
       var t1 = document.createElement('div');
       t1.textContent = r.title;
       var t2 = document.createElement('div');
@@ -433,6 +494,23 @@
     });
   }
 
+  // メイン画面下部の定期パネル開閉
+  function toggleRecurPanel() {
+    if ($recurPanel.hidden) {
+      $recurPanel.innerHTML = '';
+      $recurPanel.appendChild(buildRecurForm(function () { closeRecurPanel(); }));
+      $recurPanel.hidden = false;
+      $recurToggle.classList.add('on');
+    } else {
+      closeRecurPanel();
+    }
+  }
+  function closeRecurPanel() {
+    $recurPanel.hidden = true;
+    $recurPanel.innerHTML = '';
+    $recurToggle.classList.remove('on');
+  }
+
   // ================= 操作（楽観的更新） =================
   function load() {
     loading(true);
@@ -452,7 +530,7 @@
       assignees: state.composerAssignees.join(' '), lineMemo: '',
       createdAt: nowLocal(), doneAt: '', updatedAt: ''
     };
-    state.tasks.unshift(task);   // 即座に画面へ
+    state.tasks.unshift(task);
     render();
 
     loading(true);
@@ -523,7 +601,7 @@
     loading(true);
     api('addRecurring', rec).then(function (d) {
       state.recurring = (d && d.recurring) || state.recurring;
-      if (d && d.tasks) state.tasks = d.tasks; // 当日分が即追加された場合に反映
+      if (d && d.tasks) state.tasks = d.tasks;
       render();
       toast('定期タスクを登録しました');
     }).catch(function (e) {
@@ -565,10 +643,10 @@
 
   function buildComposerTags() {
     $composerTags.innerHTML = '';
-    PRESETS.forEach(function (name) {
+    state.assigneeOptions.forEach(function (name) {
       var tag = document.createElement('button');
       tag.type = 'button';
-      tag.className = 'tag';
+      tag.className = 'tag' + (state.composerAssignees.indexOf(name) >= 0 ? ' on' : '');
       tag.textContent = name;
       tag.addEventListener('click', function () {
         var i = state.composerAssignees.indexOf(name);
@@ -594,11 +672,14 @@
       $titleInput.focus();
     });
 
+    $recurToggle.addEventListener('click', toggleRecurPanel);
+
     document.querySelectorAll('.tab').forEach(function (tab) {
       tab.addEventListener('click', function () {
         document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('is-active'); });
         tab.classList.add('is-active');
         state.view = tab.dataset.view;
+        closeRecurPanel();
         render();
       });
     });

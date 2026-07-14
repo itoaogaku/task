@@ -53,6 +53,10 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* ダブル/トリプルタップによるズームを無効化 */
+html { touch-action: manipulation; }
+button, input, textarea, .tab, .task-main { touch-action: manipulation; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -293,20 +297,45 @@ html, body {
 }
 .text-btn.danger { color: var(--red); }
 
-/* ===== 下部入力バー（iOS Messages 風） ===== */
-.composer {
+/* ===== 下部固定ドック（定期パネル + 入力バー） ===== */
+.dock {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   max-width: 560px;
   margin: 0 auto;
-  padding: 8px 12px calc(10px + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
   background: var(--header-bg);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
   border-top: 0.5px solid var(--sep);
 }
+.recur-panel {
+  padding: 12px 12px 0;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+.composer { padding: 8px 12px 10px; }
 .composer-row { display: flex; gap: 8px; align-items: center; }
+.composer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.recur-toggle {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: none;
+  border-radius: 15px;
+  cursor: pointer;
+}
+.recur-toggle.on { color: #fff; background: var(--accent); }
 .prio-btn {
   flex: none;
   min-width: 34px;
@@ -349,9 +378,10 @@ html, body {
 
 .composer-tags {
   display: flex;
+  flex: 1;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
   max-height: 58px;
   overflow-y: auto;
 }

@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
   <title>タスク管理</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -21,24 +21,31 @@
         <button class="tab" data-view="recurring" role="tab">
           定期 <span class="tab-count" id="countRecurring">0</span>
         </button>
+        <button class="tab" data-view="settings" role="tab">確認先</button>
       </div>
       <button class="icon-btn" id="reloadBtn" title="再読み込み" aria-label="再読み込み">⟳</button>
     </header>
 
-    <!-- タスク一覧 -->
+    <!-- 一覧 -->
     <main class="list" id="taskList" aria-live="polite"></main>
     <div class="empty" id="emptyState" hidden>タスクはありません</div>
     <div class="toast" id="toast" hidden></div>
 
-    <!-- 下部固定の入力バー -->
-    <form class="composer" id="composer" autocomplete="off">
-      <div class="composer-row">
-        <button type="button" class="prio-btn" id="prioBtn" title="優先度">1</button>
-        <input class="composer-input" id="titleInput" placeholder="タスクを入力して追加…" required />
-        <button type="submit" class="add-btn" title="追加">＋</button>
-      </div>
-      <div class="composer-tags" id="composerTags"></div>
-    </form>
+    <!-- 下部固定ドック（定期パネル + 入力バー） -->
+    <div class="dock" id="dock">
+      <div class="recur-panel" id="recurPanel" hidden></div>
+      <form class="composer" id="composer" autocomplete="off">
+        <div class="composer-row">
+          <button type="button" class="prio-btn" id="prioBtn" title="優先度">1</button>
+          <input class="composer-input" id="titleInput" placeholder="タスクを入力して追加…" required />
+          <button type="submit" class="add-btn" title="追加">＋</button>
+        </div>
+        <div class="composer-foot">
+          <button type="button" class="recur-toggle" id="recurToggle">🔁 定期</button>
+          <div class="composer-tags" id="composerTags"></div>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="./config.js"></script>
