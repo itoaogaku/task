@@ -16,6 +16,8 @@
   --field: #ffffff;
   --header-bg: rgba(242, 242, 247, 0.8);
   --shadow: 0 0.5px 2px rgba(0, 0, 0, 0.12);
+  --done-ring: rgba(60, 60, 67, 0.35);
+  --done-check: #7a7a7f;
 
   --pri-s: #ff3b30;
   --pri-1: #ff9500;
@@ -28,7 +30,7 @@
   /* 表示領域の最大幅（広い画面ではここまで広がる） */
   --app-max: 900px;
   /* 左右の余白（狭めにして表示領域を広く） */
-  --pad-x: 10px;
+  --pad-x: 6px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -48,6 +50,8 @@
     --field: #1c1c1e;
     --header-bg: rgba(0, 0, 0, 0.7);
     --shadow: none;
+    --done-ring: rgba(120, 120, 128, 0.45);
+    --done-check: #ffffff;
 
     --pri-s: #ff453a;
     --pri-1: #ff9f0a;
@@ -207,21 +211,20 @@ html, body {
   background: color-mix(in srgb, var(--c, var(--accent)) 16%, transparent);
 }
 
-/* 完了トグル（薄いグレーの円形チェック） */
+/* 完了トグル（透明な丸＋薄い輪郭＋白チェックのみ） */
 .done-btn {
   flex: none;
-  width: 25px; height: 25px;
-  font-size: 13px;
+  width: 24px; height: 24px;
+  font-size: 12px;
   line-height: 1;
-  color: #fff;
-  background: var(--muted);
-  border: none;
+  color: var(--done-check);
+  background: transparent;
+  border: 1.5px solid var(--done-ring);
   border-radius: 50%;
   cursor: pointer;
   transition: transform .1s ease, opacity .1s ease;
 }
 .done-btn:active { transform: scale(0.85); }
-.task.done .done-btn { background: var(--muted-2); }
 
 /* 確認先（完了ボタンのすぐ左に inline 表示） */
 .task-assignees {
