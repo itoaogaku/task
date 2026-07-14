@@ -506,14 +506,14 @@ html, body {
 .prio-item {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
   width: 100%;
-  padding: 9px 11px;
+  padding: 7px 11px;
   background: transparent;
   border: none;
-  border-radius: 9px;
+  border-radius: 8px;
   color: var(--text);
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
 }
 .prio-item:active { background: var(--card-2); }

@@ -177,10 +177,12 @@
   function positionMenu(menu, anchor) {
     var r = anchor.getBoundingClientRect();
     var mh = menu.offsetHeight, mw = menu.offsetWidth;
-    var vw = window.innerWidth, vh = window.innerHeight;
-    var left = Math.min(Math.max(8, r.left), vw - mw - 8);
-    var top = r.top - mh - 6;                               // 上に開く
-    if (top < 8) top = Math.min(r.bottom + 6, vh - mh - 8); // 上が狭ければ下に
+    var vw = window.innerWidth;
+    // 横：押したバッジの中央の真上に
+    var left = Math.min(Math.max(6, r.left + r.width / 2 - mw / 2), vw - mw - 6);
+    // 縦：常にバッジのすぐ上に開く（画面上端は超えない）
+    var top = r.top - mh - 6;
+    if (top < 6) top = 6;
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
   }
@@ -276,7 +278,7 @@
       if (t.lineMemo) {
         var lc = document.createElement('span');
         lc.className = 'chip line';
-        lc.textContent = '詳細: ' + t.lineMemo;
+        lc.textContent = t.lineMemo;
         metaRow.appendChild(lc);
       }
       if (t.status === 'done' && t.doneAt) {
