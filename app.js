@@ -174,11 +174,15 @@
   }
   function openPrioMenu(anchor, currentKey, onSelect) {
     closePrioMenu();
+    // 入力欄のフォーカス（キーボード）を保持するため、タップでフォーカスを奪わない
+    var keepFocus = function (e) { e.preventDefault(); };
     $menuBackdrop = document.createElement('div');
     $menuBackdrop.className = 'menu-backdrop';
+    $menuBackdrop.addEventListener('mousedown', keepFocus);
     $menuBackdrop.addEventListener('click', closePrioMenu);
     $prioMenu = document.createElement('div');
     $prioMenu.className = 'prio-menu';
+    $prioMenu.addEventListener('mousedown', keepFocus);
     PRIORITIES.forEach(function (p) {
       var item = document.createElement('button');
       item.type = 'button';
@@ -1095,6 +1099,8 @@
   }
 
   function bindEvents() {
+    // タップで入力欄のフォーカス（キーボード）を失わないようにする
+    $prioBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
     $prioBtn.addEventListener('click', function () {
       openPrioMenu($prioBtn, state.composerPriority, function (key) {
         state.composerPriority = key;
