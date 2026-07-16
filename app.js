@@ -1169,6 +1169,8 @@
       tag.type = 'button';
       tag.className = 'tag' + (state.composerAssignees.indexOf(name) >= 0 ? ' on' : '');
       tag.textContent = name;
+      // タップで入力欄のフォーカス（キーボード）を奪わない＝キーボードを閉じない
+      tag.addEventListener('mousedown', function (e) { e.preventDefault(); });
       tag.addEventListener('click', function () {
         var i = state.composerAssignees.indexOf(name);
         if (i >= 0) { state.composerAssignees.splice(i, 1); tag.classList.remove('on'); }
