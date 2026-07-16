@@ -33,7 +33,7 @@ var SHARED_TOKEN = 'jaoagpagauzify7aouw';
 // 列定義（この順序でシートに保存される）
 var COLUMNS = ['id', 'title', 'priority', 'status', 'assignees', 'lineMemo', 'createdAt', 'doneAt', 'updatedAt'];
 var RECUR_COLUMNS = ['id', 'title', 'priority', 'assignees', 'freq', 'month', 'day', 'nextDue', 'active', 'createdAt'];
-var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt'];
+var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt', 'firedYear'];
 
 // ===== エントリポイント =====
 function doGet(e) {
@@ -296,11 +296,16 @@ function addArchive_(params) {
       text: String(params.text || '').trim(),
       priority: params.priority || DEFAULT_PRIORITY,
       assignees: String(params.assignees || ''),
-      createdAt: params.createdAt ? String(params.createdAt) : now_()
+      createdAt: params.createdAt ? String(params.createdAt) : now_(),
+      firedYear: ''
     };
     if (!entry.text) throw new Error('text is required');
     sheet.appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
-    return { archive: entry };
+    runArchiveReminders_(); // 記載日が本日(月日)なら即タスク化
+    return {
+      archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
+      tasks: readRows_(getSheet_(), COLUMNS)
+    };
   } finally {
     lock.releaseLock();
   }
@@ -324,9 +329,15 @@ function updateArchive_(params) {
         ['text', 'priority', 'assignees', 'createdAt'].forEach(function (k) {
           if (params[k] !== undefined) entry[k] = String(params[k]);
         });
+        // 日付を変えたら、その年のリマインダー発火状態をリセット
+        if (params.createdAt !== undefined) entry.firedYear = '';
         sheet.getRange(rowIndex, 1, 1, ARCHIVE_COLUMNS.length)
              .setValues([ARCHIVE_COLUMNS.map(function (col) { return entry[col]; })]);
-        return { archive: entry };
+        runArchiveReminders_();
+        return {
+          archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
+          tasks: readRows_(getSheet_(), COLUMNS)
+        };
       }
     }
     throw new Error('archive not found: ' + params.id);
@@ -356,8 +367,41 @@ function runRecurring() {
   lock.waitLock(15000);
   try {
     runRecurringCore_();
+    runArchiveReminders_();
   } finally {
     lock.releaseLock();
+  }
+}
+
+// 保管の各記録を「毎年その月日」にタスク化する（保管データは消さない・1年に1回だけ）
+function runArchiveReminders_() {
+  var sheet = getArchiveSheet_();
+  var last = sheet.getLastRow();
+  if (last < 2) return;
+  var today = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd');
+  var todayMMDD = today.slice(5);   // MM/dd
+  var thisYear = today.slice(0, 4);
+  var values = sheet.getRange(2, 1, last - 1, ARCHIVE_COLUMNS.length).getValues();
+  var idx = {};
+  ARCHIVE_COLUMNS.forEach(function (c, i) { idx[c] = i; });
+
+  for (var r = 0; r < values.length; r++) {
+    var row = values[r];
+    if (!row[idx.id]) continue;
+    var created = String(row[idx.createdAt] || '');
+    if (created.slice(5, 10) !== todayMMDD) continue;        // 月日が今日でない
+    if (String(row[idx.firedYear] || '') === thisYear) continue; // 今年は発火済み
+
+    var now = now_();
+    var task = {
+      id: generateId_(), title: String(row[idx.text] || ''),
+      priority: String(row[idx.priority] || '') || DEFAULT_PRIORITY,
+      status: 'open', assignees: String(row[idx.assignees] || ''), lineMemo: '',
+      createdAt: now, doneAt: '', updatedAt: now
+    };
+    if (!task.title) continue;
+    getSheet_().appendRow(COLUMNS.map(function (c) { return task[c]; }));
+    sheet.getRange(r + 2, idx.firedYear + 1).setValue(thisYear); // 今年発火済みに
   }
 }
 

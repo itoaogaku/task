@@ -839,10 +839,9 @@
     Object.keys(fields).forEach(function (k) { payload[k] = fields[k]; });
     loading(true);
     api('updateArchive', payload).then(function (d) {
-      if (d && d.archive) {
-        var idx = state.archive.map(function (x) { return x.id; }).indexOf(e.id);
-        if (idx >= 0) state.archive[idx] = d.archive;
-      }
+      if (d && d.archive) state.archive = d.archive;
+      if (d && d.tasks) state.tasks = d.tasks;
+      render();
     }).catch(function (err) {
       Object.keys(prev).forEach(function (k) { e[k] = prev[k]; });
       render();
@@ -863,15 +862,13 @@
     loading(true);
     api('addArchive', { text: text, priority: entry.priority, assignees: entry.assignees, createdAt: entry.createdAt })
       .then(function (d) {
-        if (d && d.archive) {
-          var idx = state.archive.map(function (x) { return x.id; }).indexOf(tempId);
-          if (idx >= 0) state.archive[idx] = d.archive;
-        }
-        if (state.view === 'archive') render();
+        if (d && d.archive) state.archive = d.archive;
+        if (d && d.tasks) state.tasks = d.tasks;
+        render();
       })
       .catch(function (e) {
         state.archive = state.archive.filter(function (x) { return x.id !== tempId; });
-        if (state.view === 'archive') render();
+        render();
         toast('保管失敗: ' + e.message);
       })
       .finally(function () { loading(false); });
