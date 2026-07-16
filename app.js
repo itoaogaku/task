@@ -30,10 +30,9 @@
   // ---- 状態 ----
   var state = {
     tasks: [],
-    recurring: [],
     archive: [],
     memos: [],
-    view: 'open',                 // 'open' | 'done' | 'recurring' | 'settings' | 'archive' | 'memo'
+    view: 'open',                 // 'open' | 'done' | 'settings' | 'archive' | 'memo'
     composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
@@ -261,7 +260,6 @@
 
     $list.innerHTML = '';
 
-    if (state.view === 'recurring') { $empty.hidden = true; renderRecurring($list); return; }
     if (state.view === 'settings') { $empty.hidden = true; renderSettings(); return; }
     if (state.view === 'archive') { $empty.hidden = true; renderArchive(); return; }
     if (state.view === 'memo') { $empty.hidden = true; renderMemo(); return; }
@@ -503,178 +501,6 @@
       main.appendChild(title);
       main.appendChild(del);
       el.appendChild(main);
-      group.appendChild(el);
-    });
-  }
-
-  // ================= 定期タスク（毎月 / 毎年） =================
-  function scheduleText(r) {
-    if (r.freq === 'yearly') return '毎年 ' + (+r.month) + '月' + (+r.day) + '日';
-    return '毎月 ' + (+r.day) + '日';
-  }
-
-  // 定期タスク入力フォームを生成（新規登録と編集で共用。rec を渡すと編集モード）
-  function buildRecurForm(onDone, rec) {
-    var form = document.createElement('div');
-    form.className = 'recur-form';
-
-    var hint = document.createElement('div');
-    hint.className = 'field-label';
-    hint.textContent = '設定した日付になると、未完了タスクへ自動で追加されます';
-    form.appendChild(hint);
-
-    var titleInput = document.createElement('input');
-    titleInput.className = 'composer-input';
-    titleInput.placeholder = '定期タスク名（例: 家賃の振込）';
-    if (rec) titleInput.value = rec.title || '';
-    form.appendChild(titleInput);
-
-    var opts = {
-      priority: rec ? (rec.priority || DEFAULT_PRIORITY) : DEFAULT_PRIORITY,
-      freq: rec && rec.freq === 'yearly' ? 'yearly' : 'monthly'
-    };
-    var row = document.createElement('div');
-    row.className = 'recur-row';
-
-    var prioBtn = document.createElement('button');
-    prioBtn.type = 'button';
-    prioBtn.className = 'prio-btn';
-    function refreshPrio() {
-      var m = prioMeta(opts.priority);
-      prioBtn.textContent = m.label;
-      prioBtn.style.setProperty('--c', m.color);
-    }
-    refreshPrio();
-    prioBtn.addEventListener('click', function () {
-      openPrioMenu(prioBtn, opts.priority, function (key) { opts.priority = key; refreshPrio(); });
-    });
-
-    var freqMonthly = document.createElement('button');
-    var freqYearly = document.createElement('button');
-    freqMonthly.type = freqYearly.type = 'button';
-    freqMonthly.className = 'seg on'; freqMonthly.textContent = '毎月';
-    freqYearly.className = 'seg'; freqYearly.textContent = '毎年';
-
-    row.appendChild(prioBtn);
-    row.appendChild(freqMonthly);
-    row.appendChild(freqYearly);
-    form.appendChild(row);
-
-    var dateRow = document.createElement('div');
-    dateRow.className = 'recur-row';
-    var monthWrap = document.createElement('label');
-    monthWrap.className = 'num-field';
-    monthWrap.style.display = 'none';
-    var monthInput = document.createElement('input');
-    monthInput.type = 'number'; monthInput.min = '1'; monthInput.max = '12';
-    monthInput.value = rec && rec.month ? String(+rec.month) : '1';
-    monthWrap.appendChild(monthInput);
-    monthWrap.appendChild(document.createTextNode('月'));
-
-    var dayWrap = document.createElement('label');
-    dayWrap.className = 'num-field';
-    var dayInput = document.createElement('input');
-    dayInput.type = 'number'; dayInput.min = '1'; dayInput.max = '31';
-    dayInput.value = rec && rec.day ? String(+rec.day) : '1';
-    dayWrap.appendChild(dayInput);
-    dayWrap.appendChild(document.createTextNode('日'));
-
-    dateRow.appendChild(monthWrap);
-    dateRow.appendChild(dayWrap);
-    form.appendChild(dateRow);
-
-    function setFreq(f) {
-      opts.freq = f;
-      freqMonthly.className = 'seg' + (f === 'monthly' ? ' on' : '');
-      freqYearly.className = 'seg' + (f === 'yearly' ? ' on' : '');
-      monthWrap.style.display = f === 'yearly' ? '' : 'none';
-    }
-    freqMonthly.addEventListener('click', function () { setFreq('monthly'); });
-    freqYearly.addEventListener('click', function () { setFreq('yearly'); });
-    setFreq(opts.freq); // 初期状態（編集時は既存の頻度に合わせる）
-
-    var addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'recur-add';
-    addBtn.textContent = rec ? '保存' : '＋ 定期タスクを登録';
-    addBtn.addEventListener('click', function () {
-      var title = titleInput.value.trim();
-      if (!title) { toast('定期タスク名を入力してください'); return; }
-      var payload = {
-        title: title,
-        priority: opts.priority,
-        freq: opts.freq,
-        month: opts.freq === 'yearly' ? (+monthInput.value || 1) : '',
-        day: +dayInput.value || 1
-      };
-      if (rec) {
-        updateRecurring(rec.id, payload);
-      } else {
-        addRecurring(payload);
-        titleInput.value = '';
-      }
-      if (onDone) onDone();
-    });
-    form.appendChild(addBtn);
-    return form;
-  }
-
-  function renderRecurring(container) {
-    container.appendChild(buildRecurForm(null));
-
-    if (!state.recurring.length) {
-      var none = document.createElement('div');
-      none.className = 'empty';
-      none.style.padding = '24px 8px';
-      none.textContent = '登録された定期タスクはありません';
-      container.appendChild(none);
-      return;
-    }
-    var group = document.createElement('div');
-    group.className = 'group';
-    container.appendChild(group);
-    state.recurring.forEach(function (r) {
-      var m = prioMeta(r.priority);
-      var el = document.createElement('div');
-      el.className = 'task';
-      var main = document.createElement('div');
-      main.className = 'task-main';
-
-      var badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.style.setProperty('--c', m.color);
-      badge.textContent = m.label;
-
-      var body = document.createElement('div');
-      body.className = 'task-title';
-      var t1 = document.createElement('div');
-      t1.textContent = r.title;
-      var t2 = document.createElement('div');
-      t2.className = 'recur-sub';
-      t2.textContent = scheduleText(r) + '　/　次回 ' + (r.nextDue || '-');
-      body.appendChild(t1);
-      body.appendChild(t2);
-
-      var del = document.createElement('button');
-      del.className = 'done-btn';
-      del.style.background = 'var(--muted)';
-      del.textContent = '×';
-      del.title = '定期タスクを削除';
-      del.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        if (confirm('この定期タスクを削除しますか？')) removeRecurring(r);
-      });
-
-      main.appendChild(badge);
-      main.appendChild(body);
-      main.appendChild(del);
-      main.addEventListener('click', function () { el.classList.toggle('expanded'); });
-      el.appendChild(main);
-
-      var editForm = buildRecurForm(function () { el.classList.remove('expanded'); }, r);
-      editForm.classList.add('recur-edit');
-      el.appendChild(editForm);
-
       group.appendChild(el);
     });
   }
@@ -1082,7 +908,6 @@
     loading(true);
     api('list').then(function (d) {
       state.tasks = (d && d.tasks) || [];
-      state.recurring = (d && d.recurring) || [];
       state.archive = (d && d.archive) || [];
       state.memos = (d && d.memos) || [];
       render();
@@ -1196,46 +1021,6 @@
       state.tasks = backup;
       render();
       toast('削除失敗: ' + e.message);
-    }).finally(function () { loading(false); });
-  }
-
-  function addRecurring(rec) {
-    loading(true);
-    api('addRecurring', rec).then(function (d) {
-      state.recurring = (d && d.recurring) || state.recurring;
-      if (d && d.tasks) state.tasks = d.tasks;
-      if (d && d.archive) state.archive = d.archive;
-      render();
-      toast('定期タスクを登録しました');
-    }).catch(function (e) {
-      toast('登録失敗: ' + e.message);
-    }).finally(function () { loading(false); });
-  }
-
-  function removeRecurring(r) {
-    var backup = state.recurring.slice();
-    state.recurring = state.recurring.filter(function (x) { return x.id !== r.id; });
-    render();
-    loading(true);
-    api('deleteRecurring', { id: r.id }).catch(function (e) {
-      state.recurring = backup;
-      render();
-      toast('削除失敗: ' + e.message);
-    }).finally(function () { loading(false); });
-  }
-
-  function updateRecurring(id, fields) {
-    var payload = { id: id };
-    Object.keys(fields).forEach(function (k) { payload[k] = fields[k]; });
-    loading(true);
-    api('updateRecurring', payload).then(function (d) {
-      if (d && d.recurring) state.recurring = d.recurring;
-      if (d && d.tasks) state.tasks = d.tasks;
-      if (d && d.archive) state.archive = d.archive;
-      render();
-      toast('定期タスクを更新しました');
-    }).catch(function (e) {
-      toast('更新失敗: ' + e.message);
     }).finally(function () { loading(false); });
   }
 
