@@ -457,9 +457,9 @@ html, body {
   flex: none;
   padding: 6px 14px;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  background: var(--card-2);
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   border: none;
   border-radius: 15px;
   cursor: pointer;
