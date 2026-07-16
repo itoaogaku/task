@@ -974,7 +974,7 @@
         t.status = 'open'; t.doneAt = ''; render();
         toast('更新失敗: ' + e.message);
       }).finally(function () { loading(false); });
-    }, 2500);
+    }, 1500);
   }
 
   function setTaskPriority(t, key) {

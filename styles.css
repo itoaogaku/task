@@ -671,7 +671,8 @@ html, body {
 .undo-bar {
   position: fixed;
   left: 50%;
-  bottom: 96px;
+  top: calc(var(--safe-top) + 64px);
+  bottom: auto;
   transform: translateX(-50%);
   z-index: 45;
   display: flex;
