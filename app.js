@@ -672,6 +672,11 @@
     badge.className = 'badge';
     badge.style.setProperty('--c', meta.color);
     badge.textContent = meta.label;
+    badge.title = '優先度を変更';
+    badge.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      openPrioMenu(badge, e.priority, function (key) { saveArchiveFields(e, { priority: key }); });
+    });
 
     var text = document.createElement('div');
     text.className = 'task-title';
@@ -683,10 +688,11 @@
     dateInput.className = 'arch-date';
     dateInput.value = toDateInputValue(e.createdAt);
     dateInput.title = '日付を変更';
+    dateInput.addEventListener('click', function (ev) { ev.stopPropagation(); });
     dateInput.addEventListener('change', function () {
       if (!dateInput.value) return;
       var time = (e.createdAt || '').slice(11, 16) || '00:00';
-      updateArchiveDate(e, dateInput.value.replace(/-/g, '/') + ' ' + time);
+      saveArchiveFields(e, { createdAt: dateInput.value.replace(/-/g, '/') + ' ' + time });
     });
 
     var del = document.createElement('button');
@@ -694,7 +700,8 @@
     del.style.background = 'var(--muted)';
     del.textContent = '×';
     del.title = '記録を削除';
-    del.addEventListener('click', function () {
+    del.addEventListener('click', function (ev) {
+      ev.stopPropagation();
       if (confirm('この記録を削除しますか？')) removeArchive(e);
     });
 
@@ -702,6 +709,7 @@
     main.appendChild(text);
     main.appendChild(dateInput);
     main.appendChild(del);
+    main.addEventListener('click', function () { el.classList.toggle('expanded'); });
     el.appendChild(main);
 
     if (assignees.length) {
@@ -715,23 +723,81 @@
       });
       el.appendChild(metaRow);
     }
+
+    el.appendChild(archiveEditEl(e));
     return el;
   }
 
-  function updateArchiveDate(e, newCreated) {
-    var prev = e.createdAt;
-    e.createdAt = newCreated;
+  function archiveEditEl(e) {
+    var wrap = document.createElement('div');
+    wrap.className = 'task-edit';
+
+    var tLabel = document.createElement('div');
+    tLabel.className = 'field-label';
+    tLabel.textContent = '内容';
+    var textInput = document.createElement('input');
+    textInput.className = 'composer-input';
+    textInput.value = e.text || '';
+
+    var aLabel = document.createElement('div');
+    aLabel.className = 'field-label';
+    aLabel.textContent = '確認対象者';
+    var selected = parseAssignees(e.assignees);
+    var tagRow = document.createElement('div');
+    tagRow.className = 'tag-row';
+    var union = state.assigneeOptions.concat(selected.filter(function (s) { return state.assigneeOptions.indexOf(s) < 0; }));
+    union.forEach(function (name) {
+      var tag = document.createElement('button');
+      tag.type = 'button';
+      tag.className = 'tag' + (selected.indexOf(name) >= 0 ? ' on' : '');
+      tag.textContent = name;
+      tag.addEventListener('click', function () {
+        var i = selected.indexOf(name);
+        if (i >= 0) { selected.splice(i, 1); tag.classList.remove('on'); }
+        else { selected.push(name); tag.classList.add('on'); }
+      });
+      tagRow.appendChild(tag);
+    });
+
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'save-btn';
+    saveBtn.textContent = '保存';
+    saveBtn.addEventListener('click', function () {
+      var changed = {};
+      var nt = textInput.value.trim();
+      if (nt && nt !== (e.text || '')) changed.text = nt;
+      var na = selected.join(' ');
+      if (na !== (e.assignees || '')) changed.assignees = na;
+      if (Object.keys(changed).length) saveArchiveFields(e, changed);
+      else { var host = wrap.closest ? wrap.closest('.task') : null; if (host) host.classList.remove('expanded'); }
+      toast('保存しました');
+    });
+
+    wrap.appendChild(tLabel);
+    wrap.appendChild(textInput);
+    wrap.appendChild(aLabel);
+    wrap.appendChild(tagRow);
+    wrap.appendChild(saveBtn);
+    return wrap;
+  }
+
+  function saveArchiveFields(e, fields) {
+    var prev = {};
+    Object.keys(fields).forEach(function (k) { prev[k] = e[k]; e[k] = fields[k]; });
     render();
+    var payload = { id: e.id };
+    Object.keys(fields).forEach(function (k) { payload[k] = fields[k]; });
     loading(true);
-    api('updateArchive', { id: e.id, createdAt: newCreated }).then(function (d) {
+    api('updateArchive', payload).then(function (d) {
       if (d && d.archive) {
         var idx = state.archive.map(function (x) { return x.id; }).indexOf(e.id);
         if (idx >= 0) state.archive[idx] = d.archive;
       }
     }).catch(function (err) {
-      e.createdAt = prev;
+      Object.keys(prev).forEach(function (k) { e[k] = prev[k]; });
       render();
-      toast('日付変更に失敗: ' + err.message);
+      toast('保存に失敗: ' + err.message);
     }).finally(function () { loading(false); });
   }
 
