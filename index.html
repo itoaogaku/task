@@ -20,7 +20,6 @@
         <button class="tab is-active" data-view="open" role="tab">タスク</button>
         <button class="tab" data-view="archive" role="tab">保管</button>
         <button class="tab" data-view="done" role="tab">完了</button>
-        <button class="tab" data-view="recurring" role="tab">定期</button>
         <button class="tab" data-view="settings" role="tab">確認先</button>
       </div>
       <button class="icon-btn" id="reloadBtn" title="再読み込み" aria-label="再読み込み">⟳</button>
@@ -43,6 +42,7 @@
         <div class="composer-foot">
           <button type="button" class="archive-btn" id="archiveBtn">保管</button>
           <input type="date" class="archive-date-input" id="archiveDateInput" style="display:none" />
+          <button type="button" class="repeat-btn" id="repeatBtn" style="display:none">1回のみ</button>
           <div class="composer-tags" id="composerTags"></div>
         </div>
       </form>

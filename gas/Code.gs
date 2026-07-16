@@ -33,7 +33,7 @@ var SHARED_TOKEN = 'jaoagpagauzify7aouw';
 // 列定義（この順序でシートに保存される）
 var COLUMNS = ['id', 'title', 'priority', 'status', 'assignees', 'lineMemo', 'createdAt', 'doneAt', 'updatedAt'];
 var RECUR_COLUMNS = ['id', 'title', 'priority', 'assignees', 'freq', 'month', 'day', 'nextDue', 'active', 'createdAt'];
-var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt', 'firedYear'];
+var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt', 'repeat', 'lastFired'];
 
 // ===== エントリポイント =====
 function doGet(e) {
@@ -291,13 +291,15 @@ function addArchive_(params) {
   lock.waitLock(15000);
   try {
     var sheet = getArchiveSheet_();
+    var repeat = (params.repeat === 'monthly' || params.repeat === 'yearly') ? params.repeat : 'none';
     var entry = {
       id: generateId_(),
       text: String(params.text || '').trim(),
       priority: params.priority || DEFAULT_PRIORITY,
       assignees: String(params.assignees || ''),
       createdAt: params.createdAt ? String(params.createdAt) : now_(),
-      firedYear: ''
+      repeat: repeat,
+      lastFired: ''
     };
     if (!entry.text) throw new Error('text is required');
     sheet.appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
@@ -329,8 +331,11 @@ function updateArchive_(params) {
         ['text', 'priority', 'assignees', 'createdAt'].forEach(function (k) {
           if (params[k] !== undefined) entry[k] = String(params[k]);
         });
-        // 日付を変えたら、その年のリマインダー発火状態をリセット
-        if (params.createdAt !== undefined) entry.firedYear = '';
+        if (params.repeat !== undefined) {
+          entry.repeat = (params.repeat === 'monthly' || params.repeat === 'yearly') ? params.repeat : 'none';
+        }
+        // 日付や繰り返し設定を変えたら、発火状態をリセット
+        if (params.createdAt !== undefined || params.repeat !== undefined) entry.lastFired = '';
         sheet.getRange(rowIndex, 1, 1, ARCHIVE_COLUMNS.length)
              .setValues([ARCHIVE_COLUMNS.map(function (col) { return entry[col]; })]);
         runArchiveReminders_();
@@ -373,14 +378,17 @@ function runRecurring() {
   }
 }
 
-// 保管の各記録を「毎年その月日」にタスク化する（保管データは消さない・1年に1回だけ）
+// 保管の各記録を繰り返し設定に応じてタスク化する（保管データは消さない・同日に二重発火しない）
+//   repeat = 'yearly'  … 毎年その月日にタスク化
+//   repeat = 'monthly' … 毎月その日にタスク化
+//   repeat = 'none'    … タスク化しない（保管のみ）
 function runArchiveReminders_() {
   var sheet = getArchiveSheet_();
   var last = sheet.getLastRow();
   if (last < 2) return;
   var today = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd');
   var todayMMDD = today.slice(5);   // MM/dd
-  var thisYear = today.slice(0, 4);
+  var todayDD = today.slice(8);     // dd
   var values = sheet.getRange(2, 1, last - 1, ARCHIVE_COLUMNS.length).getValues();
   var idx = {};
   ARCHIVE_COLUMNS.forEach(function (c, i) { idx[c] = i; });
@@ -388,9 +396,15 @@ function runArchiveReminders_() {
   for (var r = 0; r < values.length; r++) {
     var row = values[r];
     if (!row[idx.id]) continue;
+    var repeat = String(row[idx.repeat] || 'none');
+    if (repeat !== 'monthly' && repeat !== 'yearly') continue; // 保管のみ
     var created = String(row[idx.createdAt] || '');
-    if (created.slice(5, 10) !== todayMMDD) continue;        // 月日が今日でない
-    if (String(row[idx.firedYear] || '') === thisYear) continue; // 今年は発火済み
+    if (repeat === 'yearly') {
+      if (created.slice(5, 10) !== todayMMDD) continue;  // 月日が今日でない
+    } else { // monthly
+      if (created.slice(8, 10) !== todayDD) continue;    // 日が今日でない
+    }
+    if (String(row[idx.lastFired] || '') === today) continue; // 本日は発火済み
 
     var now = now_();
     var task = {
@@ -401,7 +415,7 @@ function runArchiveReminders_() {
     };
     if (!task.title) continue;
     getSheet_().appendRow(COLUMNS.map(function (c) { return task[c]; }));
-    sheet.getRange(r + 2, idx.firedYear + 1).setValue(thisYear); // 今年発火済みに
+    sheet.getRange(r + 2, idx.lastFired + 1).setValue(today); // 本日発火済みに
   }
 }
 
@@ -451,7 +465,7 @@ function createTaskFromRecur_(rec) {
   // 定期タスクの自動生成を保管（記録）にも反映
   var entry = {
     id: generateId_(), text: '【定期】' + rec.title, priority: rec.priority || DEFAULT_PRIORITY,
-    assignees: rec.assignees || '', createdAt: now
+    assignees: rec.assignees || '', createdAt: now, repeat: 'none', lastFired: ''
   };
   getArchiveSheet_().appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
 }

@@ -18,6 +18,15 @@
   var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'ie', p3: 'ie' };
   var ASSIGNEE_STORE = 'assignee_options_v1';
 
+  // 保管の繰り返し設定（none=1回のみ / monthly=毎月 / yearly=毎年）
+  var REPEAT_LABELS = { none: '1回のみ', monthly: '毎月', yearly: '毎年' };
+  var REPEAT_ORDER = ['none', 'monthly', 'yearly'];
+  function normalizeRepeat(v) { return (v === 'monthly' || v === 'yearly') ? v : 'none'; }
+  function nextRepeat(v) {
+    var i = REPEAT_ORDER.indexOf(normalizeRepeat(v));
+    return REPEAT_ORDER[(i + 1) % REPEAT_ORDER.length];
+  }
+
   // ---- 状態 ----
   var state = {
     tasks: [],
@@ -27,6 +36,7 @@
     composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
+    composerRepeat: 'none',       // 保管入力時の繰り返し設定
     assigneeOptions: loadAssignees()
   };
 
@@ -40,6 +50,7 @@
   var $composerTags = document.getElementById('composerTags');
   var $archiveBtn = document.getElementById('archiveBtn');
   var $archiveDateInput = document.getElementById('archiveDateInput');
+  var $repeatBtn = document.getElementById('repeatBtn');
   var $fab = document.getElementById('fab');
   var $closeFab = document.getElementById('closeFab');
   var $composerBackdrop = document.getElementById('composerBackdrop');
@@ -731,6 +742,15 @@
     text.className = 'task-title';
     text.textContent = e.text;
 
+    // 繰り返し設定の表示（毎月/毎年のみ）
+    var rep = normalizeRepeat(e.repeat);
+    if (rep !== 'none') {
+      var repTag = document.createElement('span');
+      repTag.className = 'repeat-tag';
+      repTag.textContent = REPEAT_LABELS[rep];
+      text.appendChild(repTag);
+    }
+
     // 日付変更（タップで日付ピッカー）
     var dateInput = document.createElement('input');
     dateInput.type = 'date';
@@ -808,6 +828,27 @@
       tagRow.appendChild(tag);
     });
 
+    // 繰り返し設定（1回のみ / 毎月 / 毎年）
+    var rLabel = document.createElement('div');
+    rLabel.className = 'field-label';
+    rLabel.textContent = '繰り返し（この日付になると自動でタスクに追加）';
+    var rRow = document.createElement('div');
+    rRow.className = 'tag-row';
+    var curRepeat = normalizeRepeat(e.repeat);
+    var repeatSegs = {};
+    REPEAT_ORDER.forEach(function (key) {
+      var seg = document.createElement('button');
+      seg.type = 'button';
+      seg.className = 'seg' + (key === curRepeat ? ' on' : '');
+      seg.textContent = REPEAT_LABELS[key];
+      seg.addEventListener('click', function () {
+        curRepeat = key;
+        REPEAT_ORDER.forEach(function (k) { repeatSegs[k].className = 'seg' + (k === key ? ' on' : ''); });
+      });
+      repeatSegs[key] = seg;
+      rRow.appendChild(seg);
+    });
+
     var saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'save-btn';
@@ -818,6 +859,7 @@
       if (nt && nt !== (e.text || '')) changed.text = nt;
       var na = selected.join(' ');
       if (na !== (e.assignees || '')) changed.assignees = na;
+      if (curRepeat !== normalizeRepeat(e.repeat)) changed.repeat = curRepeat;
       if (Object.keys(changed).length) saveArchiveFields(e, changed);
       else { var host = wrap.closest ? wrap.closest('.task') : null; if (host) host.classList.remove('expanded'); }
       toast('保存しました');
@@ -827,6 +869,8 @@
     wrap.appendChild(textInput);
     wrap.appendChild(aLabel);
     wrap.appendChild(tagRow);
+    wrap.appendChild(rLabel);
+    wrap.appendChild(rRow);
     wrap.appendChild(saveBtn);
     return wrap;
   }
@@ -849,18 +893,19 @@
     }).finally(function () { loading(false); });
   }
 
-  function addArchive(text, createdAt) {
+  function addArchive(text, createdAt, repeat) {
     var tempId = 'tmp-' + Date.now();
     var entry = {
       id: tempId, text: text, priority: state.composerPriority,
-      assignees: state.composerAssignees.join(' '), createdAt: createdAt || nowLocal()
+      assignees: state.composerAssignees.join(' '), createdAt: createdAt || nowLocal(),
+      repeat: normalizeRepeat(repeat), lastFired: ''
     };
     state.archive.unshift(entry);
     if (state.view === 'archive') render();
     toast('保管しました');
 
     loading(true);
-    api('addArchive', { text: text, priority: entry.priority, assignees: entry.assignees, createdAt: entry.createdAt })
+    api('addArchive', { text: text, priority: entry.priority, assignees: entry.assignees, createdAt: entry.createdAt, repeat: entry.repeat })
       .then(function (d) {
         if (d && d.archive) state.archive = d.archive;
         if (d && d.tasks) state.tasks = d.tasks;
@@ -1079,8 +1124,14 @@
     var isArchive = state.view === 'archive';
     $archiveBtn.style.display = isArchive ? 'none' : '';
     $archiveDateInput.style.display = isArchive ? '' : 'none';
+    $repeatBtn.style.display = isArchive ? '' : 'none';
     if (isArchive && !$archiveDateInput.value) $archiveDateInput.value = toDateInputValue(nowLocal());
-    $titleInput.placeholder = isArchive ? '記録を保管…（保管のみ）' : 'タスクを入力して追加…';
+    updateRepeatBtn();
+    $titleInput.placeholder = isArchive ? '記録を保管…（毎年/毎月で自動タスク化）' : 'タスクを入力して追加…';
+  }
+  function updateRepeatBtn() {
+    $repeatBtn.textContent = REPEAT_LABELS[normalizeRepeat(state.composerRepeat)];
+    $repeatBtn.classList.toggle('on', state.composerRepeat !== 'none');
   }
   function openComposer() {
     state.composerOpen = true;
@@ -1128,7 +1179,7 @@
         if ($archiveDateInput.value) {
           created = $archiveDateInput.value.replace(/-/g, '/') + ' ' + nowLocal().slice(11, 16);
         }
-        addArchive(title, created); // 保管タブでは保管のみ（選択した日付で）
+        addArchive(title, created, state.composerRepeat); // 選択した日付・繰り返しで保管
       } else {
         addTask(title);
       }
@@ -1143,6 +1194,12 @@
       addArchive(text);   // 同じ内容を保管にも格納
       $titleInput.value = '';
       $titleInput.focus();
+    });
+
+    $repeatBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    $repeatBtn.addEventListener('click', function () {
+      state.composerRepeat = nextRepeat(state.composerRepeat);
+      updateRepeatBtn();
     });
 
     $fab.addEventListener('click', openComposer);
