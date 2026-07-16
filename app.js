@@ -1071,12 +1071,16 @@
 
   // 入力ドックの開閉（未完了/完了タブでのみ丸ボタン⇄入力欄）
   function updateComposerVisibility() {
-    var canCompose = state.view === 'open' || state.view === 'done';
+    var canCompose = state.view === 'open' || state.view === 'done' || state.view === 'archive';
     var anyExpanded = !!$list.querySelector('.task.expanded');
     $dock.style.display = (canCompose && state.composerOpen) ? '' : 'none';
     // 項目を開いている時は丸ボタンを隠す
     $fab.style.display = (canCompose && !state.composerOpen && !anyExpanded) ? '' : 'none';
     $composerBackdrop.classList.toggle('show', canCompose && state.composerOpen);
+    // 保管タブでは「保管専用」入力。保管ボタンは不要なので隠し、案内文を変える
+    var isArchive = state.view === 'archive';
+    $archiveBtn.style.display = isArchive ? 'none' : '';
+    $titleInput.placeholder = isArchive ? '記録を保管…（保管のみ）' : 'タスクを入力して追加…';
   }
   function openComposer() {
     state.composerOpen = true;
@@ -1119,7 +1123,8 @@
       e.preventDefault();
       var title = $titleInput.value.trim();
       if (!title) return;
-      addTask(title);
+      if (state.view === 'archive') addArchive(title); // 保管タブでは保管のみ
+      else addTask(title);
       $titleInput.value = '';
       $titleInput.focus();
     });
