@@ -295,6 +295,14 @@ html, body {
   text-overflow: ellipsis;
 }
 .done-time { color: var(--muted); }
+.pending-chip {
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ff9500;
+  background: color-mix(in srgb, #ff9500 16%, transparent);
+  border-radius: 8px;
+}
 
 /* ===== 展開エリア（編集） ===== */
 .task-edit {

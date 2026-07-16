@@ -17,6 +17,7 @@
   // 旧優先度キー → 新キーの読み替え（過去データ対応）
   var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'ie', p3: 'ie' };
   var ASSIGNEE_STORE = 'assignee_options_v1';
+  var OUTBOX_STORE = 'task_outbox_v1';   // 未送信タスク（通信失敗時も端末に保持）
 
   // 保管の繰り返し設定（none=登録のみ / monthly=毎月 / yearly=毎年）
   var REPEAT_LABELS = { none: '登録', monthly: '毎月', yearly: '毎年' };
@@ -357,9 +358,15 @@
     main.addEventListener('click', function () { el.classList.toggle('expanded'); updateComposerVisibility(); });
     el.appendChild(main);
 
-    if (t.lineMemo || (t.status === 'done' && t.doneAt)) {
+    if (t.lineMemo || (t.status === 'done' && t.doneAt) || t.pending) {
       var metaRow = document.createElement('div');
       metaRow.className = 'task-meta';
+      if (t.pending) {
+        var pc = document.createElement('span');
+        pc.className = 'pending-chip';
+        pc.textContent = '未送信（通信待ち）';
+        metaRow.appendChild(pc);
+      }
       if (t.lineMemo) {
         var lc = document.createElement('span');
         lc.className = 'chip line';
@@ -924,6 +931,12 @@
     loading(true);
     api('list').then(function (d) {
       state.tasks = (d && d.tasks) || [];
+      // 未送信タスクを先頭に復元。サーバーに既にある分（送信済み）はキューから除去
+      var serverIds = {};
+      state.tasks.forEach(function (t) { serverIds[t.id] = true; });
+      var stillPending = loadOutbox().filter(function (x) { return !serverIds[x.id]; });
+      saveOutbox(stillPending);
+      state.tasks = stillPending.map(outboxToTask).concat(state.tasks);
       state.archive = (d && d.archive) || [];
       state.memos = (d && d.memos) || [];
       var serverAssignees = (d && d.assignees) || [];
@@ -943,37 +956,83 @@
       loading(false);
       state.ready = true;   // 読み込み完了（失敗時も）後に入力UIを表示
       render();
+      flushOutbox();        // 未送信タスクがあれば再送を試みる
     });
   }
 
-  function addTask(title) {
-    var tempId = 'tmp-' + Date.now();
-    var task = {
-      id: tempId, title: title, priority: state.composerPriority, status: 'open',
-      assignees: state.composerAssignees.join(' '), lineMemo: '',
-      createdAt: nowLocal(), doneAt: '', updatedAt: ''
+  // ---- 未送信タスク（アウトボックス）----
+  // 入力した瞬間に端末へ保存し、送信は自動リトライ。通信が悪くても内容を失わない。
+  function loadOutbox() {
+    try {
+      var s = localStorage.getItem(OUTBOX_STORE);
+      if (s) { var a = JSON.parse(s); if (Array.isArray(a)) return a; }
+    } catch (e) { /* noop */ }
+    return [];
+  }
+  function saveOutbox(list) {
+    try { localStorage.setItem(OUTBOX_STORE, JSON.stringify(list)); } catch (e) { /* noop */ }
+  }
+  function clientId() {
+    return 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+  }
+  function outboxToTask(item) {
+    return {
+      id: item.id, title: item.title, priority: item.priority, status: 'open',
+      assignees: item.assignees || '', lineMemo: '',
+      createdAt: item.createdAt, doneAt: '', updatedAt: '', pending: true
     };
-    state.tasks.unshift(task);
-    render();
+  }
+  function indexById(id) {
+    for (var i = 0; i < state.tasks.length; i++) if (state.tasks[i].id === id) return i;
+    return -1;
+  }
 
-    loading(true);
-    api('add', {
-      title: title, priority: task.priority, assignees: task.assignees
-    }).then(function (d) {
-      var real = d.task;
-      var idx = state.tasks.map(function (x) { return x.id; }).indexOf(tempId);
-      if (idx >= 0) state.tasks[idx] = real;
-      render();
-    }).catch(function (e) {
-      state.tasks = state.tasks.filter(function (x) { return x.id !== tempId; });
-      render();
-      toast('追加失敗: ' + e.message);
-    }).finally(function () { loading(false); });
+  function addTask(title) {
+    var item = {
+      id: clientId(), title: title, priority: state.composerPriority,
+      assignees: state.composerAssignees.join(' '), createdAt: nowLocal()
+    };
+    var outbox = loadOutbox();
+    outbox.push(item);
+    saveOutbox(outbox);              // まず端末に保存（ここで内容は確定的に残る）
+    state.tasks.unshift(outboxToTask(item));
+    render();
+    flushOutbox();                  // 送信を試みる（失敗しても消えない）
+  }
+
+  var flushing = false, flushTimer = null;
+  function scheduleFlush() {
+    if (flushTimer) return;
+    flushTimer = setTimeout(function () { flushTimer = null; flushOutbox(); }, 15000);
+  }
+  // 未送信キューを先頭から順に送信。失敗したら残して後で再送。
+  function flushOutbox() {
+    if (flushing) return;
+    var outbox = loadOutbox();
+    if (!outbox.length) return;
+    flushing = true;
+    var item = outbox[0];
+    api('add', { id: item.id, title: item.title, priority: item.priority, assignees: item.assignees })
+      .then(function (d) {
+        var real = d && d.task;
+        var idx = indexById(item.id);
+        if (idx >= 0) { if (real) state.tasks[idx] = real; else state.tasks[idx].pending = false; }
+        else if (real) { state.tasks.unshift(real); }
+        saveOutbox(loadOutbox().filter(function (x) { return x.id !== item.id; }));
+        flushing = false;
+        render();
+        if (loadOutbox().length) flushOutbox();   // 続けて次を送信
+      })
+      .catch(function (e) {
+        flushing = false;
+        scheduleFlush();                          // 送れなかった。後でまた試す
+      });
   }
 
   var completeTimers = {}; // id -> timer（確定待ちの完了）
 
   function toggleComplete(t) {
+    if (t.pending) { toast('通信待ちです。送信後に完了できます'); return; }
     if (t.status !== 'done') { completeTask(t); return; }
 
     // 完了 → 未完了に戻す
@@ -1029,6 +1088,7 @@
   }
 
   function saveField(t, fields, onError) {
+    if (t.pending) { toast('通信待ちです。送信後に変更できます'); if (onError) onError(); return; }
     Object.keys(fields).forEach(function (k) { t[k] = fields[k]; });
     render();
     var payload = { id: t.id };
@@ -1043,6 +1103,13 @@
   }
 
   function removeTask(t) {
+    // 未送信タスクはサーバーへ送らず、端末のキューごと削除
+    if (t.pending) {
+      state.tasks = state.tasks.filter(function (x) { return x.id !== t.id; });
+      saveOutbox(loadOutbox().filter(function (x) { return x.id !== t.id; }));
+      render();
+      return;
+    }
     var backup = state.tasks.slice();
     state.tasks = state.tasks.filter(function (x) { return x.id !== t.id; });
     render();
@@ -1154,6 +1221,13 @@
     });
 
     document.getElementById('reloadBtn').addEventListener('click', load);
+
+    // 通信が復帰したら未送信タスクを自動で再送
+    window.addEventListener('online', flushOutbox);
+    // 画面に戻ってきた（アプリ復帰）ときも再送を試みる
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) flushOutbox();
+    });
   }
 
   // ================= 起動 =================

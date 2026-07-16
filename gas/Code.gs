@@ -123,6 +123,11 @@ function addTask_(params) {
   lock.waitLock(15000);
   try {
     var sheet = getSheet_();
+    // 同じIDが既にあれば二重追加しない（オフライン再送で重複を防ぐ）
+    if (params.id) {
+      var existing = findRow_(params.id);
+      if (existing) return { task: existing.task };
+    }
     var now = now_();
     var task = {
       id: params.id || generateId_(),
