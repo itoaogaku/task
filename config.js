@@ -19,7 +19,8 @@ window.APP_CONFIG = {
     { key: 'p1', label: '1', color: '#ff9500' },
     { key: 'p2', label: '2', color: '#007aff' },
     { key: 'cho', label: '長', color: '#30b0c7' },
-    { key: 'ie',  label: '家', color: '#5856d6' }
+    { key: 'ie',  label: '家', color: '#5856d6' },
+    { key: 'm',  label: 'M', color: '#8e8e93' }
   ],
 
   // 新規タスクの初期優先度（key）。

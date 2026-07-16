@@ -10,7 +10,8 @@
     { key: 'p1', label: '1', color: '#ff9500' },
     { key: 'p2', label: '2', color: '#007aff' },
     { key: 'cho', label: '長', color: '#30b0c7' },
-    { key: 'ie', label: '家', color: '#5856d6' }
+    { key: 'ie', label: '家', color: '#5856d6' },
+    { key: 'm', label: 'M', color: '#8e8e93' }
   ];
   var DEFAULT_PRIORITY = CFG.DEFAULT_PRIORITY || (PRIORITIES[0] && PRIORITIES[0].key) || 's';
   // 旧優先度キー → 新キーの読み替え（過去データ対応）
@@ -243,14 +244,33 @@
     if (state.view === 'settings') { $empty.hidden = true; renderSettings(); return; }
     if (state.view === 'archive') { $empty.hidden = true; renderArchive(); return; }
 
-    var rows = state.view === 'open' ? open : done;
-    $empty.hidden = rows.length !== 0;
-    if (rows.length) {
+    function appendGroup(list) {
       var group = document.createElement('div');
       group.className = 'group';
-      rows.forEach(function (t) { group.appendChild(taskEl(t)); });
+      list.forEach(function (t) { group.appendChild(taskEl(t)); });
       $list.appendChild(group);
     }
+
+    var rows = state.view === 'open' ? open : done;
+    $empty.hidden = rows.length !== 0;
+
+    if (state.view === 'open') {
+      // M（memory）のタスクは別枠に分けて表示
+      var mIndex = prioIndexOf('m');
+      var mainList = open.filter(function (t) { return prioMeta(t.priority).index !== mIndex; });
+      var memList = open.filter(function (t) { return prioMeta(t.priority).index === mIndex; });
+      if (mainList.length) appendGroup(mainList);
+      if (memList.length) {
+        var div = document.createElement('div');
+        div.className = 'memory-divider';
+        div.innerHTML = '<span>memory</span>';
+        $list.appendChild(div);
+        appendGroup(memList);
+      }
+      return;
+    }
+
+    if (rows.length) appendGroup(rows);
   }
 
   function taskEl(t) {

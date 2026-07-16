@@ -173,6 +173,28 @@ html, body {
   box-shadow: var(--shadow);
   margin-bottom: 16px;
 }
+
+/* memory（M）区切り */
+.memory-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 6px 10px;
+  color: var(--muted);
+}
+.memory-divider span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.memory-divider::before,
+.memory-divider::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: var(--sep);
+}
 /* インセットの区切り線（左を空けて iOS 風に） */
 .group .task + .task::before {
   content: '';
