@@ -44,6 +44,7 @@
     archive: [],
     memos: [],
     view: 'open',                 // 'open' | 'done' | 'settings' | 'archive' | 'memo'
+    ready: false,                 // 初回読み込みが終わったか（読み込み中は入力UIを隠す）
     composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
@@ -938,7 +939,11 @@
       render();
     }).catch(function (e) {
       toast('読み込み失敗: ' + e.message);
-    }).finally(function () { loading(false); });
+    }).finally(function () {
+      loading(false);
+      state.ready = true;   // 読み込み完了（失敗時も）後に入力UIを表示
+      render();
+    });
   }
 
   function addTask(title) {
@@ -1071,7 +1076,8 @@
 
   // 入力ドックの開閉（タスク/完了タブでのみ丸ボタン⇄入力欄）
   function updateComposerVisibility() {
-    var canCompose = state.view === 'open' || state.view === 'done';
+    // 初回読み込みが終わるまでは入力UI（丸＋・入力ドック）を一切出さない
+    var canCompose = state.ready && (state.view === 'open' || state.view === 'done');
     var anyExpanded = !!$list.querySelector('.task.expanded');
     $dock.style.display = (canCompose && state.composerOpen) ? '' : 'none';
     // 項目を開いている時は丸ボタンを隠す
@@ -1158,6 +1164,7 @@
     buildComposerTags();
     updatePrioBtn();
     bindEvents();
+    updateComposerVisibility(); // 読み込み前に入力UIを隠しておく（丸＋/−の同時表示を防ぐ）
     load();
   }
 
