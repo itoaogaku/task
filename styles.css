@@ -8,7 +8,7 @@
   --muted: #8e8e93;
   --muted-2: #aeaeb2;
   --sep: rgba(60, 60, 67, 0.18);
-  --accent: #007aff;
+  --accent: #068c89;
   --green: #34c759;
   --red: #ff3b30;
   --seg-bg: rgba(118, 118, 128, 0.12);
@@ -44,7 +44,7 @@
     --muted: #8e8e93;
     --muted-2: #636366;
     --sep: rgba(84, 84, 88, 0.6);
-    --accent: #0a84ff;
+    --accent: #0aa5a1;
     --green: #30d158;
     --red: #ff453a;
     --seg-bg: rgba(118, 118, 128, 0.24);
@@ -696,7 +696,7 @@ html, body {
   padding: 4px 10px;
   font-size: 14px;
   font-weight: 700;
-  color: #4da3ff;
+  color: #2ab7b1;
   background: transparent;
   border: none;
   border-radius: 8px;
