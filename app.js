@@ -19,7 +19,7 @@
   var ASSIGNEE_STORE = 'assignee_options_v1';
 
   // 保管の繰り返し設定（none=1回のみ / monthly=毎月 / yearly=毎年）
-  var REPEAT_LABELS = { none: '1回のみ', monthly: '毎月', yearly: '毎年' };
+  var REPEAT_LABELS = { none: '登録', monthly: '毎月', yearly: '毎年' };
   var REPEAT_ORDER = ['none', 'monthly', 'yearly'];
   function normalizeRepeat(v) { return (v === 'monthly' || v === 'yearly') ? v : 'none'; }
   function nextRepeat(v) {
