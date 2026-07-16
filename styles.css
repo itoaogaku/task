@@ -353,6 +353,9 @@ html, body {
   font-family: inherit;
 }
 .memo:focus, .composer-input:focus { outline: none; }
+/* メモタブの入力欄・一覧 */
+.memo-quick { min-height: 88px; margin-bottom: 10px; }
+.memo-text { white-space: pre-wrap; }
 
 .save-btn {
   width: 100%;

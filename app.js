@@ -32,7 +32,8 @@
     tasks: [],
     recurring: [],
     archive: [],
-    view: 'open',                 // 'open' | 'done' | 'recurring' | 'settings' | 'archive'
+    memos: [],
+    view: 'open',                 // 'open' | 'done' | 'recurring' | 'settings' | 'archive' | 'memo'
     composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
@@ -263,6 +264,7 @@
     if (state.view === 'recurring') { $empty.hidden = true; renderRecurring($list); return; }
     if (state.view === 'settings') { $empty.hidden = true; renderSettings(); return; }
     if (state.view === 'archive') { $empty.hidden = true; renderArchive(); return; }
+    if (state.view === 'memo') { $empty.hidden = true; renderMemo(); return; }
 
     function appendGroup(list) {
       var group = document.createElement('div');
@@ -931,6 +933,150 @@
     }).finally(function () { loading(false); });
   }
 
+  // ================= メモ（自由記入のメモ帳） =================
+  function renderMemo() {
+    // 上部：ささっと書ける入力欄（常時表示）
+    var card = document.createElement('div');
+    card.className = 'recur-form';
+
+    var ta = document.createElement('textarea');
+    ta.className = 'memo memo-quick';
+    ta.placeholder = 'ここにメモをささっと入力…';
+    card.appendChild(ta);
+
+    var addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'recur-add';
+    addBtn.textContent = '＋ メモを追加';
+    addBtn.addEventListener('click', function () {
+      var text = ta.value.trim();
+      if (!text) { toast('メモを入力してください'); return; }
+      addMemo(text);
+      ta.value = '';
+    });
+    card.appendChild(addBtn);
+    $list.appendChild(card);
+
+    if (!state.memos.length) {
+      var none = document.createElement('div');
+      none.className = 'empty';
+      none.style.padding = '24px 8px';
+      none.textContent = 'メモはまだありません';
+      $list.appendChild(none);
+      return;
+    }
+
+    // 新しい順に表示
+    var memos = state.memos.slice().sort(function (a, b) {
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+    var group = document.createElement('div');
+    group.className = 'group';
+    $list.appendChild(group);
+    memos.forEach(function (m) { group.appendChild(memoEl(m)); });
+  }
+
+  function memoEl(m) {
+    var el = document.createElement('div');
+    el.className = 'task';
+
+    var main = document.createElement('div');
+    main.className = 'task-main';
+
+    var body = document.createElement('div');
+    body.className = 'task-title memo-text';
+    body.textContent = m.text;
+
+    var del = document.createElement('button');
+    del.className = 'done-btn';
+    del.style.background = 'var(--muted)';
+    del.textContent = '×';
+    del.title = 'メモを削除';
+    del.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      if (confirm('このメモを削除しますか？')) removeMemo(m);
+    });
+
+    main.appendChild(body);
+    main.appendChild(del);
+    main.addEventListener('click', function () { el.classList.toggle('expanded'); });
+    el.appendChild(main);
+
+    var when = document.createElement('div');
+    when.className = 'task-meta';
+    var dc = document.createElement('span');
+    dc.className = 'done-time';
+    dc.textContent = m.createdAt || '';
+    when.appendChild(dc);
+    el.appendChild(when);
+
+    // 編集パネル
+    var wrap = document.createElement('div');
+    wrap.className = 'task-edit';
+    var ta = document.createElement('textarea');
+    ta.className = 'memo';
+    ta.value = m.text || '';
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'save-btn';
+    saveBtn.textContent = '保存';
+    saveBtn.addEventListener('click', function () {
+      var nt = ta.value.trim();
+      if (nt && nt !== (m.text || '')) updateMemo(m, nt);
+      else { el.classList.remove('expanded'); }
+      toast('保存しました');
+    });
+    wrap.appendChild(ta);
+    wrap.appendChild(saveBtn);
+    el.appendChild(wrap);
+
+    return el;
+  }
+
+  function addMemo(text) {
+    var tempId = 'tmp-' + Date.now();
+    var memo = { id: tempId, text: text, createdAt: nowLocal(), updatedAt: nowLocal() };
+    state.memos.unshift(memo);
+    render();
+    toast('メモを追加しました');
+    loading(true);
+    api('addMemo', { text: text }).then(function (d) {
+      if (d && d.memos) state.memos = d.memos;
+      render();
+    }).catch(function (e) {
+      state.memos = state.memos.filter(function (x) { return x.id !== tempId; });
+      render();
+      toast('追加失敗: ' + e.message);
+    }).finally(function () { loading(false); });
+  }
+
+  function updateMemo(m, text) {
+    var prev = m.text;
+    m.text = text;
+    render();
+    loading(true);
+    api('updateMemo', { id: m.id, text: text }).then(function (d) {
+      if (d && d.memos) state.memos = d.memos;
+      render();
+    }).catch(function (e) {
+      m.text = prev;
+      render();
+      toast('保存失敗: ' + e.message);
+    }).finally(function () { loading(false); });
+  }
+
+  function removeMemo(m) {
+    var backup = state.memos.slice();
+    state.memos = state.memos.filter(function (x) { return x.id !== m.id; });
+    render();
+    loading(true);
+    api('deleteMemo', { id: m.id }).catch(function (e) {
+      state.memos = backup;
+      render();
+      toast('削除失敗: ' + e.message);
+    }).finally(function () { loading(false); });
+  }
+
   // ================= 操作（楽観的更新） =================
   function load() {
     loading(true);
@@ -938,6 +1084,7 @@
       state.tasks = (d && d.tasks) || [];
       state.recurring = (d && d.recurring) || [];
       state.archive = (d && d.archive) || [];
+      state.memos = (d && d.memos) || [];
       render();
     }).catch(function (e) {
       toast('読み込み失敗: ' + e.message);

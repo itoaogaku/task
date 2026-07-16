@@ -25,6 +25,7 @@
 var SHEET_NAME = 'Tasks';
 var RECUR_SHEET = 'Recurring';
 var ARCHIVE_SHEET = 'Archive';
+var MEMO_SHEET = 'Memo';
 var TIMEZONE = 'Asia/Tokyo';
 var DEFAULT_PRIORITY = 'p1';
 // 簡易アクセストークン（フロントの config.js の TOKEN と一致させる）
@@ -34,6 +35,7 @@ var SHARED_TOKEN = 'jaoagpagauzify7aouw';
 var COLUMNS = ['id', 'title', 'priority', 'status', 'assignees', 'lineMemo', 'createdAt', 'doneAt', 'updatedAt'];
 var RECUR_COLUMNS = ['id', 'title', 'priority', 'assignees', 'freq', 'month', 'day', 'nextDue', 'active', 'createdAt'];
 var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt', 'repeat', 'lastFired'];
+var MEMO_COLUMNS = ['id', 'text', 'createdAt', 'updatedAt'];
 
 // ===== エントリポイント =====
 function doGet(e) {
@@ -74,6 +76,9 @@ function handle_(e, params) {
       case 'addArchive':      result = addArchive_(params); break;
       case 'updateArchive':   result = updateArchive_(params); break;
       case 'deleteArchive':   result = deleteArchive_(params.id); break;
+      case 'addMemo':         result = addMemo_(params); break;
+      case 'updateMemo':      result = updateMemo_(params); break;
+      case 'deleteMemo':      result = deleteMemo_(params.id); break;
       default:
         return json_({ ok: false, error: 'unknown action: ' + action });
     }
@@ -88,7 +93,8 @@ function listAll_() {
   return {
     tasks: readRows_(getSheet_(), COLUMNS),
     recurring: readRows_(getRecurSheet_(), RECUR_COLUMNS),
-    archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS)
+    archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
+    memos: readRows_(getMemoSheet_(), MEMO_COLUMNS)
   };
 }
 
@@ -366,6 +372,66 @@ function deleteArchive_(id) {
   }
 }
 
+// ===== メモ（自由記入のメモ帳） =====
+function addMemo_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var sheet = getMemoSheet_();
+    var now = now_();
+    var memo = {
+      id: generateId_(),
+      text: String(params.text || '').trim(),
+      createdAt: now,
+      updatedAt: now
+    };
+    if (!memo.text) throw new Error('text is required');
+    sheet.appendRow(MEMO_COLUMNS.map(function (c) { return memo[c]; }));
+    return { memo: memo, memos: readRows_(getMemoSheet_(), MEMO_COLUMNS) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateMemo_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var sheet = getMemoSheet_();
+    var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+    for (var r = 1; r < ids.length; r++) {
+      if (String(ids[r][0]) !== String(params.id)) continue;
+      var rowIndex = r + 1;
+      var vals = sheet.getRange(rowIndex, 1, 1, MEMO_COLUMNS.length).getValues()[0];
+      var memo = {};
+      for (var c = 0; c < MEMO_COLUMNS.length; c++) memo[MEMO_COLUMNS[c]] = vals[c] != null ? String(vals[c]) : '';
+      if (params.text !== undefined) memo.text = String(params.text);
+      memo.updatedAt = now_();
+      sheet.getRange(rowIndex, 1, 1, MEMO_COLUMNS.length)
+           .setValues([MEMO_COLUMNS.map(function (col) { return memo[col]; })]);
+      return { memo: memo, memos: readRows_(getMemoSheet_(), MEMO_COLUMNS) };
+    }
+    throw new Error('memo not found: ' + params.id);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteMemo_(id) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var sheet = getMemoSheet_();
+    var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+    for (var r = 1; r < ids.length; r++) {
+      if (String(ids[r][0]) === String(id)) { sheet.deleteRow(r + 1); return { id: id }; }
+    }
+    throw new Error('memo not found: ' + id);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // 毎日1回のトリガーから呼ばれるエントリポイント
 function runRecurring() {
   var lock = LockService.getScriptLock();
@@ -535,6 +601,10 @@ function getRecurSheet_() {
 
 function getArchiveSheet_() {
   return ensureSheet_(ARCHIVE_SHEET, ARCHIVE_COLUMNS);
+}
+
+function getMemoSheet_() {
+  return ensureSheet_(MEMO_SHEET, MEMO_COLUMNS);
 }
 
 function ensureSheet_(name, cols) {
