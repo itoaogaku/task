@@ -278,7 +278,7 @@
 
     var doneBtn = document.createElement('button');
     doneBtn.className = 'done-btn';
-    doneBtn.textContent = t.status === 'done' ? '↩' : '✓';
+    doneBtn.textContent = t.status === 'done' ? '↺' : '✓';
     doneBtn.title = t.status === 'done' ? '未完了に戻す' : '完了';
     doneBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleComplete(t); });
 
