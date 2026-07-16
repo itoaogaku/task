@@ -40,6 +40,7 @@
   var $composerTags = document.getElementById('composerTags');
   var $archiveBtn = document.getElementById('archiveBtn');
   var $fab = document.getElementById('fab');
+  var $closeFab = document.getElementById('closeFab');
   var $composerBackdrop = document.getElementById('composerBackdrop');
   var $toast = document.getElementById('toast');
 
@@ -1124,6 +1125,7 @@
     });
 
     $fab.addEventListener('click', openComposer);
+    $closeFab.addEventListener('click', closeComposer);
     $composerBackdrop.addEventListener('click', closeComposer);
 
     document.querySelectorAll('.tab').forEach(function (tab) {
