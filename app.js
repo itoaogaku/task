@@ -99,6 +99,33 @@
     toastTimer = setTimeout(function () { $toast.hidden = true; }, 2200);
   }
 
+  // 「取り消す」スナックバー
+  var $undo = null, undoCurrentId = null;
+  function showUndoBar(id, message, onUndo) {
+    if (!$undo) {
+      $undo = document.createElement('div');
+      $undo.className = 'undo-bar';
+      document.body.appendChild($undo);
+    }
+    undoCurrentId = id;
+    $undo.innerHTML = '';
+    var span = document.createElement('span');
+    span.textContent = message;
+    var btn = document.createElement('button');
+    btn.className = 'undo-btn';
+    btn.textContent = '取り消す';
+    btn.addEventListener('click', function () { undoCurrentId = null; $undo.classList.remove('show'); onUndo(); });
+    $undo.appendChild(span);
+    $undo.appendChild(btn);
+    $undo.classList.add('show');
+  }
+  function hideUndoBar(id) {
+    if ($undo && (id === undefined || undoCurrentId === id)) {
+      $undo.classList.remove('show');
+      undoCurrentId = null;
+    }
+  }
+
   // ================= 優先度ユーティリティ =================
   function prioIndexOf(key) {
     for (var i = 0; i < PRIORITIES.length; i++) if (PRIORITIES[i].key === key) return i;
@@ -785,20 +812,55 @@
     }).finally(function () { loading(false); });
   }
 
+  var completeTimers = {}; // id -> timer（確定待ちの完了）
+
   function toggleComplete(t) {
-    var toDone = t.status !== 'done';
-    t.status = toDone ? 'done' : 'open';
-    t.doneAt = toDone ? nowLocal() : '';
-    render();
+    if (t.status !== 'done') { completeTask(t); return; }
+
+    // 完了 → 未完了に戻す
+    if (completeTimers[t.id]) {
+      // まだ確定前ならサーバーへ送らずに取り消し
+      clearTimeout(completeTimers[t.id]);
+      delete completeTimers[t.id];
+      hideUndoBar(t.id);
+      t.status = 'open'; t.doneAt = ''; render();
+      return;
+    }
+    t.status = 'open'; t.doneAt = ''; render();
     loading(true);
-    api(toDone ? 'complete' : 'uncomplete', { id: t.id }).then(function (d) {
+    api('uncomplete', { id: t.id }).then(function (d) {
       mergeTask(d.task);
     }).catch(function (e) {
-      t.status = toDone ? 'open' : 'done';
-      t.doneAt = toDone ? '' : t.doneAt;
-      render();
+      t.status = 'done'; t.doneAt = nowLocal(); render();
       toast('更新失敗: ' + e.message);
     }).finally(function () { loading(false); });
+  }
+
+  // 完了：画面上は即完了にし、約2秒「取り消す」を表示。その間に取り消せば保存しない。
+  function completeTask(t) {
+    t.status = 'done';
+    t.doneAt = nowLocal();
+    render();
+
+    if (completeTimers[t.id]) clearTimeout(completeTimers[t.id]);
+
+    showUndoBar(t.id, '完了にしました', function () {
+      clearTimeout(completeTimers[t.id]);
+      delete completeTimers[t.id];
+      t.status = 'open'; t.doneAt = ''; render();
+    });
+
+    completeTimers[t.id] = setTimeout(function () {
+      delete completeTimers[t.id];
+      hideUndoBar(t.id);
+      loading(true);
+      api('complete', { id: t.id }).then(function (d) {
+        mergeTask(d.task);
+      }).catch(function (e) {
+        t.status = 'open'; t.doneAt = ''; render();
+        toast('更新失敗: ' + e.message);
+      }).finally(function () { loading(false); });
+    }, 2500);
   }
 
   function setTaskPriority(t, key) {

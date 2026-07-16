@@ -581,6 +581,43 @@ html, body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
 }
 
+/* 「取り消す」スナックバー */
+.undo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(100% - 24px);
+  padding: 9px 10px 9px 16px;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(44, 44, 46, 0.98);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+.undo-bar.show { opacity: 1; pointer-events: auto; }
+.undo-btn {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4da3ff;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.undo-btn:active { opacity: .6; }
+
 /* ローディングバー */
 .loading-bar {
   position: fixed;
