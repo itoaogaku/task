@@ -642,7 +642,7 @@ function writeRow_(sheet, rowIndex, task) {
 }
 
 function now_() {
-  return Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd HH:mm');
+  return Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd HH:mm:ss');
 }
 
 function generateId_() {

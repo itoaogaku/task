@@ -18,14 +18,10 @@
   var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'ie', p3: 'ie' };
   var ASSIGNEE_STORE = 'assignee_options_v1';
 
-  // 保管の繰り返し設定（none=1回のみ / monthly=毎月 / yearly=毎年）
+  // 保管の繰り返し設定（none=登録のみ / monthly=毎月 / yearly=毎年）
   var REPEAT_LABELS = { none: '登録', monthly: '毎月', yearly: '毎年' };
   var REPEAT_ORDER = ['none', 'monthly', 'yearly'];
   function normalizeRepeat(v) { return (v === 'monthly' || v === 'yearly') ? v : 'none'; }
-  function nextRepeat(v) {
-    var i = REPEAT_ORDER.indexOf(normalizeRepeat(v));
-    return REPEAT_ORDER[(i + 1) % REPEAT_ORDER.length];
-  }
 
   // ---- 状態 ----
   var state = {
@@ -36,7 +32,6 @@
     composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
-    composerRepeat: 'none',       // 保管入力時の繰り返し設定
     assigneeOptions: loadAssignees()
   };
 
@@ -49,8 +44,6 @@
   var $prioBtn = document.getElementById('prioBtn');
   var $composerTags = document.getElementById('composerTags');
   var $archiveBtn = document.getElementById('archiveBtn');
-  var $archiveDateInput = document.getElementById('archiveDateInput');
-  var $repeatBtn = document.getElementById('repeatBtn');
   var $fab = document.getElementById('fab');
   var $closeFab = document.getElementById('closeFab');
   var $composerBackdrop = document.getElementById('composerBackdrop');
@@ -353,7 +346,7 @@
       if (t.status === 'done' && t.doneAt) {
         var dc = document.createElement('span');
         dc.className = 'done-time';
-        dc.textContent = '完了 ' + t.doneAt;
+        dc.textContent = '完了 ' + (t.doneAt || '').slice(0, 16);
         metaRow.appendChild(dc);
       }
       el.appendChild(metaRow);
@@ -832,7 +825,7 @@
     when.className = 'task-meta';
     var dc = document.createElement('span');
     dc.className = 'done-time';
-    dc.textContent = m.createdAt || '';
+    dc.textContent = (m.createdAt || '').slice(0, 16);
     when.appendChild(dc);
     el.appendChild(when);
 
@@ -1034,7 +1027,7 @@
   function nowLocal() {
     var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
     return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) +
-      ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+      ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
 
   // ================= 入力バー / タブ =================
@@ -1044,26 +1037,14 @@
     $prioBtn.style.setProperty('--c', m.color);
   }
 
-  // 入力ドックの開閉（未完了/完了タブでのみ丸ボタン⇄入力欄）
+  // 入力ドックの開閉（タスク/完了タブでのみ丸ボタン⇄入力欄）
   function updateComposerVisibility() {
-    var canCompose = state.view === 'open' || state.view === 'done' || state.view === 'archive';
+    var canCompose = state.view === 'open' || state.view === 'done';
     var anyExpanded = !!$list.querySelector('.task.expanded');
     $dock.style.display = (canCompose && state.composerOpen) ? '' : 'none';
     // 項目を開いている時は丸ボタンを隠す
     $fab.style.display = (canCompose && !state.composerOpen && !anyExpanded) ? '' : 'none';
     $composerBackdrop.classList.toggle('show', canCompose && state.composerOpen);
-    // 保管タブでは「保管専用」入力。保管ボタンは不要なので隠し、案内文を変え、日付選択を出す
-    var isArchive = state.view === 'archive';
-    $archiveBtn.style.display = isArchive ? 'none' : '';
-    $archiveDateInput.style.display = isArchive ? '' : 'none';
-    $repeatBtn.style.display = isArchive ? '' : 'none';
-    if (isArchive && !$archiveDateInput.value) $archiveDateInput.value = toDateInputValue(nowLocal());
-    updateRepeatBtn();
-    $titleInput.placeholder = isArchive ? '記録を保管…（毎年/毎月で自動タスク化）' : 'タスクを入力して追加…';
-  }
-  function updateRepeatBtn() {
-    $repeatBtn.textContent = REPEAT_LABELS[normalizeRepeat(state.composerRepeat)];
-    $repeatBtn.classList.toggle('on', state.composerRepeat !== 'none');
   }
   function openComposer() {
     state.composerOpen = true;
@@ -1106,15 +1087,7 @@
       e.preventDefault();
       var title = $titleInput.value.trim();
       if (!title) return;
-      if (state.view === 'archive') {
-        var created;
-        if ($archiveDateInput.value) {
-          created = $archiveDateInput.value.replace(/-/g, '/') + ' ' + nowLocal().slice(11, 16);
-        }
-        addArchive(title, created, state.composerRepeat); // 選択した日付・繰り返しで保管
-      } else {
-        addTask(title);
-      }
+      addTask(title);
       $titleInput.value = '';
       $titleInput.focus();
     });
@@ -1126,12 +1099,6 @@
       addArchive(text);   // 同じ内容を保管にも格納
       $titleInput.value = '';
       $titleInput.focus();
-    });
-
-    $repeatBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
-    $repeatBtn.addEventListener('click', function () {
-      state.composerRepeat = nextRepeat(state.composerRepeat);
-      updateRepeatBtn();
     });
 
     $fab.addEventListener('click', openComposer);
