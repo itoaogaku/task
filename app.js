@@ -318,7 +318,7 @@
       main.appendChild(ia);
     }
     main.appendChild(doneBtn);
-    main.addEventListener('click', function () { el.classList.toggle('expanded'); });
+    main.addEventListener('click', function () { el.classList.toggle('expanded'); updateComposerVisibility(); });
     el.appendChild(main);
 
     if (t.lineMemo || (t.status === 'done' && t.doneAt)) {
@@ -1064,8 +1064,10 @@
   // 入力ドックの開閉（未完了/完了タブでのみ丸ボタン⇄入力欄）
   function updateComposerVisibility() {
     var canCompose = state.view === 'open' || state.view === 'done';
+    var anyExpanded = !!$list.querySelector('.task.expanded');
     $dock.style.display = (canCompose && state.composerOpen) ? '' : 'none';
-    $fab.style.display = (canCompose && !state.composerOpen) ? '' : 'none';
+    // 項目を開いている時は丸ボタンを隠す
+    $fab.style.display = (canCompose && !state.composerOpen && !anyExpanded) ? '' : 'none';
     $composerBackdrop.classList.toggle('show', canCompose && state.composerOpen);
   }
   function openComposer() {
