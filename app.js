@@ -209,7 +209,14 @@
     positionMenu($prioMenu, anchor);
   }
   function positionMenu(menu, anchor) {
-    // タップしたバッジの近くに開く（上にスペースがあれば上、なければ下）
+    // キーボード表示中（入力欄オープン）は画面左上に固定して隠れないようにする
+    if (state.composerOpen) {
+      var vv = window.visualViewport;
+      menu.style.left = ((vv ? vv.offsetLeft : 0) + 10) + 'px';
+      menu.style.top = ((vv ? vv.offsetTop : 0) + 10) + 'px';
+      return;
+    }
+    // 通常はタップしたバッジの近くに開く（上にスペースがあれば上、なければ下）
     var r = anchor.getBoundingClientRect();
     var mh = menu.offsetHeight, mw = menu.offsetWidth;
     var vw = window.innerWidth, vh = window.innerHeight;
