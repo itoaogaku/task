@@ -23,6 +23,21 @@
   var REPEAT_ORDER = ['none', 'monthly', 'yearly'];
   function normalizeRepeat(v) { return (v === 'monthly' || v === 'yearly') ? v : 'none'; }
 
+  // 日時を日本語表記へ（例: 2026年7月15日 06:00）。英語表記(Wed Jul 15 ...)も解釈する
+  function fmtDateTimeJa(s) {
+    s = String(s == null ? '' : s);
+    if (!s) return '';
+    var p = function (n) { return ('0' + n).slice(-2); };
+    var m = s.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})[ T](\d{1,2}):(\d{2})/);
+    if (m) return (+m[1]) + '年' + (+m[2]) + '月' + (+m[3]) + '日 ' + p(m[4]) + ':' + m[5];
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' +
+        p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+    return s;
+  }
+
   // ---- 状態 ----
   var state = {
     tasks: [],
@@ -32,7 +47,7 @@
     composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
-    assigneeOptions: loadAssignees()
+    assigneeOptions: loadLegacyAssignees()  // 起動直後の暫定表示。読み込み後にサーバー値で置換
   };
 
   // ---- DOM 参照 ----
@@ -49,16 +64,23 @@
   var $composerBackdrop = document.getElementById('composerBackdrop');
   var $toast = document.getElementById('toast');
 
-  // ================= 確認対象者リスト（端末に保存） =================
-  function loadAssignees() {
+  // ================= 確認対象者リスト（スプレッドシートで共有） =================
+  // 旧バージョンの端末内リスト（または初期プリセット）。サーバー未登録のときの移行元。
+  function loadLegacyAssignees() {
     try {
       var s = localStorage.getItem(ASSIGNEE_STORE);
-      if (s) { var a = JSON.parse(s); if (Array.isArray(a)) return a; }
+      if (s) { var a = JSON.parse(s); if (Array.isArray(a) && a.length) return a; }
     } catch (e) { /* noop */ }
     return (CFG.ASSIGNEE_PRESETS || []).slice();
   }
+  // 確認先リストをサーバー（スプレッドシート）へ保存し、端末をまたいで共有する
   function saveAssignees() {
-    try { localStorage.setItem(ASSIGNEE_STORE, JSON.stringify(state.assigneeOptions)); } catch (e) { /* noop */ }
+    loading(true);
+    api('setAssignees', { names: state.assigneeOptions.slice() }).then(function (d) {
+      if (d && d.assignees) { state.assigneeOptions = d.assignees; buildComposerTags(); render(); }
+    }).catch(function (e) {
+      toast('確認先の保存に失敗: ' + e.message);
+    }).finally(function () { loading(false); });
   }
 
   // ================= API =================
@@ -346,7 +368,7 @@
       if (t.status === 'done' && t.doneAt) {
         var dc = document.createElement('span');
         dc.className = 'done-time';
-        dc.textContent = '完了 ' + (t.doneAt || '').slice(0, 16);
+        dc.textContent = '完了 ' + fmtDateTimeJa(t.doneAt);
         metaRow.appendChild(dc);
       }
       el.appendChild(metaRow);
@@ -825,7 +847,7 @@
     when.className = 'task-meta';
     var dc = document.createElement('span');
     dc.className = 'done-time';
-    dc.textContent = (m.createdAt || '').slice(0, 16);
+    dc.textContent = fmtDateTimeJa(m.createdAt);
     when.appendChild(dc);
     el.appendChild(when);
 
@@ -903,6 +925,16 @@
       state.tasks = (d && d.tasks) || [];
       state.archive = (d && d.archive) || [];
       state.memos = (d && d.memos) || [];
+      var serverAssignees = (d && d.assignees) || [];
+      if (serverAssignees.length) {
+        state.assigneeOptions = serverAssignees;
+      } else {
+        // サーバー未登録：この端末の既存リスト（または初期プリセット）を初回移行して保存
+        var seed = loadLegacyAssignees();
+        state.assigneeOptions = seed;
+        if (seed.length) saveAssignees();
+      }
+      buildComposerTags();
       render();
     }).catch(function (e) {
       toast('読み込み失敗: ' + e.message);

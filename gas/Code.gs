@@ -26,6 +26,7 @@ var SHEET_NAME = 'Tasks';
 var RECUR_SHEET = 'Recurring';
 var ARCHIVE_SHEET = 'Archive';
 var MEMO_SHEET = 'Memo';
+var ASSIGNEE_SHEET = 'Assignees';
 var TIMEZONE = 'Asia/Tokyo';
 var DEFAULT_PRIORITY = 'p1';
 // 簡易アクセストークン（フロントの config.js の TOKEN と一致させる）
@@ -36,6 +37,7 @@ var COLUMNS = ['id', 'title', 'priority', 'status', 'assignees', 'lineMemo', 'cr
 var RECUR_COLUMNS = ['id', 'title', 'priority', 'assignees', 'freq', 'month', 'day', 'nextDue', 'active', 'createdAt'];
 var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt', 'repeat', 'lastFired'];
 var MEMO_COLUMNS = ['id', 'text', 'createdAt', 'updatedAt'];
+var ASSIGNEE_COLUMNS = ['name'];
 
 // ===== エントリポイント =====
 function doGet(e) {
@@ -79,6 +81,7 @@ function handle_(e, params) {
       case 'addMemo':         result = addMemo_(params); break;
       case 'updateMemo':      result = updateMemo_(params); break;
       case 'deleteMemo':      result = deleteMemo_(params.id); break;
+      case 'setAssignees':    result = setAssignees_(params); break;
       default:
         return json_({ ok: false, error: 'unknown action: ' + action });
     }
@@ -94,7 +97,8 @@ function listAll_() {
     tasks: readRows_(getSheet_(), COLUMNS),
     recurring: readRows_(getRecurSheet_(), RECUR_COLUMNS),
     archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
-    memos: readRows_(getMemoSheet_(), MEMO_COLUMNS)
+    memos: readRows_(getMemoSheet_(), MEMO_COLUMNS),
+    assignees: readAssignees_()
   };
 }
 
@@ -106,7 +110,13 @@ function readRows_(sheet, cols) {
     if (!row[0]) continue; // id が無い行はスキップ
     var obj = {};
     for (var c = 0; c < cols.length; c++) {
-      obj[cols[c]] = row[c] != null ? String(row[c]) : '';
+      var v = row[c];
+      if (v instanceof Date) {
+        // シートが日付型に自動変換したセルは yyyy/MM/dd HH:mm:ss 文字列へ整形
+        obj[cols[c]] = Utilities.formatDate(v, TIMEZONE, 'yyyy/MM/dd HH:mm:ss');
+      } else {
+        obj[cols[c]] = v != null ? String(v) : '';
+      }
     }
     rows.push(obj);
   }
@@ -432,6 +442,48 @@ function deleteMemo_(id) {
   }
 }
 
+// ===== 確認先（確認対象者リスト・端末をまたいで共有） =====
+function readAssignees_() {
+  var sheet = getAssigneeSheet_();
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var vals = sheet.getRange(2, 1, last - 1, 1).getValues();
+  var out = [];
+  for (var i = 0; i < vals.length; i++) {
+    var n = vals[i][0];
+    if (n != null && String(n).trim() !== '') out.push(String(n));
+  }
+  return out;
+}
+
+// 確認先リストをまるごと上書き保存（順序を保持・重複と空を除去）
+function setAssignees_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var names = params.names;
+    if (!Array.isArray(names)) {
+      try { names = JSON.parse(names); } catch (e) { names = []; }
+    }
+    if (!Array.isArray(names)) names = [];
+    var clean = [];
+    for (var i = 0; i < names.length; i++) {
+      var n = String(names[i] == null ? '' : names[i]).trim();
+      if (n && clean.indexOf(n) < 0) clean.push(n);
+    }
+    var sheet = getAssigneeSheet_();
+    sheet.clearContents();
+    sheet.getRange(1, 1).setValue('name');
+    if (clean.length) {
+      sheet.getRange(2, 1, clean.length, 1).setValues(clean.map(function (n) { return [n]; }));
+    }
+    sheet.setFrozenRows(1);
+    return { assignees: clean };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // 毎日1回のトリガーから呼ばれるエントリポイント
 function runRecurring() {
   var lock = LockService.getScriptLock();
@@ -605,6 +657,10 @@ function getArchiveSheet_() {
 
 function getMemoSheet_() {
   return ensureSheet_(MEMO_SHEET, MEMO_COLUMNS);
+}
+
+function getAssigneeSheet_() {
+  return ensureSheet_(ASSIGNEE_SHEET, ASSIGNEE_COLUMNS);
 }
 
 function ensureSheet_(name, cols) {
