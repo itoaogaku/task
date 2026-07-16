@@ -471,8 +471,8 @@
     return '毎月 ' + (+r.day) + '日';
   }
 
-  // 定期タスク入力フォームを生成（メイン画面のパネルと定期タブで共用）
-  function buildRecurForm(onDone) {
+  // 定期タスク入力フォームを生成（新規登録と編集で共用。rec を渡すと編集モード）
+  function buildRecurForm(onDone, rec) {
     var form = document.createElement('div');
     form.className = 'recur-form';
 
@@ -484,9 +484,13 @@
     var titleInput = document.createElement('input');
     titleInput.className = 'composer-input';
     titleInput.placeholder = '定期タスク名（例: 家賃の振込）';
+    if (rec) titleInput.value = rec.title || '';
     form.appendChild(titleInput);
 
-    var opts = { priority: DEFAULT_PRIORITY, freq: 'monthly' };
+    var opts = {
+      priority: rec ? (rec.priority || DEFAULT_PRIORITY) : DEFAULT_PRIORITY,
+      freq: rec && rec.freq === 'yearly' ? 'yearly' : 'monthly'
+    };
     var row = document.createElement('div');
     row.className = 'recur-row';
 
@@ -520,14 +524,16 @@
     monthWrap.className = 'num-field';
     monthWrap.style.display = 'none';
     var monthInput = document.createElement('input');
-    monthInput.type = 'number'; monthInput.min = '1'; monthInput.max = '12'; monthInput.value = '1';
+    monthInput.type = 'number'; monthInput.min = '1'; monthInput.max = '12';
+    monthInput.value = rec && rec.month ? String(+rec.month) : '1';
     monthWrap.appendChild(monthInput);
     monthWrap.appendChild(document.createTextNode('月'));
 
     var dayWrap = document.createElement('label');
     dayWrap.className = 'num-field';
     var dayInput = document.createElement('input');
-    dayInput.type = 'number'; dayInput.min = '1'; dayInput.max = '31'; dayInput.value = '1';
+    dayInput.type = 'number'; dayInput.min = '1'; dayInput.max = '31';
+    dayInput.value = rec && rec.day ? String(+rec.day) : '1';
     dayWrap.appendChild(dayInput);
     dayWrap.appendChild(document.createTextNode('日'));
 
@@ -543,22 +549,28 @@
     }
     freqMonthly.addEventListener('click', function () { setFreq('monthly'); });
     freqYearly.addEventListener('click', function () { setFreq('yearly'); });
+    setFreq(opts.freq); // 初期状態（編集時は既存の頻度に合わせる）
 
     var addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'recur-add';
-    addBtn.textContent = '＋ 定期タスクを登録';
+    addBtn.textContent = rec ? '保存' : '＋ 定期タスクを登録';
     addBtn.addEventListener('click', function () {
       var title = titleInput.value.trim();
       if (!title) { toast('定期タスク名を入力してください'); return; }
-      addRecurring({
+      var payload = {
         title: title,
         priority: opts.priority,
         freq: opts.freq,
         month: opts.freq === 'yearly' ? (+monthInput.value || 1) : '',
         day: +dayInput.value || 1
-      });
-      titleInput.value = '';
+      };
+      if (rec) {
+        updateRecurring(rec.id, payload);
+      } else {
+        addRecurring(payload);
+        titleInput.value = '';
+      }
       if (onDone) onDone();
     });
     form.appendChild(addBtn);
@@ -606,14 +618,21 @@
       del.style.background = 'var(--muted)';
       del.textContent = '×';
       del.title = '定期タスクを削除';
-      del.addEventListener('click', function () {
+      del.addEventListener('click', function (ev) {
+        ev.stopPropagation();
         if (confirm('この定期タスクを削除しますか？')) removeRecurring(r);
       });
 
       main.appendChild(badge);
       main.appendChild(body);
       main.appendChild(del);
+      main.addEventListener('click', function () { el.classList.toggle('expanded'); });
       el.appendChild(main);
+
+      var editForm = buildRecurForm(function () { el.classList.remove('expanded'); }, r);
+      editForm.classList.add('recur-edit');
+      el.appendChild(editForm);
+
       group.appendChild(el);
     });
   }
@@ -984,6 +1003,21 @@
       state.recurring = backup;
       render();
       toast('削除失敗: ' + e.message);
+    }).finally(function () { loading(false); });
+  }
+
+  function updateRecurring(id, fields) {
+    var payload = { id: id };
+    Object.keys(fields).forEach(function (k) { payload[k] = fields[k]; });
+    loading(true);
+    api('updateRecurring', payload).then(function (d) {
+      if (d && d.recurring) state.recurring = d.recurring;
+      if (d && d.tasks) state.tasks = d.tasks;
+      if (d && d.archive) state.archive = d.archive;
+      render();
+      toast('定期タスクを更新しました');
+    }).catch(function (e) {
+      toast('更新失敗: ' + e.message);
     }).finally(function () { loading(false); });
   }
 

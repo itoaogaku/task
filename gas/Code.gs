@@ -69,6 +69,7 @@ function handle_(e, params) {
       case 'uncomplete':      result = setStatus_(params.id, 'open'); break;
       case 'delete':          result = deleteTask_(params.id); break;
       case 'addRecurring':    result = addRecurring_(params); break;
+      case 'updateRecurring': result = updateRecurring_(params); break;
       case 'deleteRecurring': result = deleteRecurring_(params.id); break;
       case 'addArchive':      result = addArchive_(params); break;
       case 'updateArchive':   result = updateArchive_(params); break;
@@ -217,6 +218,53 @@ function addRecurring_(params) {
       tasks: readRows_(getSheet_(), COLUMNS),
       archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS)
     };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateRecurring_(params) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var sheet = getRecurSheet_();
+    var last = sheet.getLastRow();
+    var ids = sheet.getRange(1, 1, last, 1).getValues();
+    for (var r = 1; r < ids.length; r++) {
+      if (String(ids[r][0]) !== String(params.id)) continue;
+      var rowIndex = r + 1;
+      var vals = sheet.getRange(rowIndex, 1, 1, RECUR_COLUMNS.length).getValues()[0];
+      var cur = {};
+      for (var c = 0; c < RECUR_COLUMNS.length; c++) cur[RECUR_COLUMNS[c]] = vals[c] != null ? String(vals[c]) : '';
+
+      var freq = (params.freq !== undefined ? params.freq : cur.freq) === 'yearly' ? 'yearly' : 'monthly';
+      var day = clampInt_(params.day !== undefined ? params.day : cur.day, 1, 31);
+      var month = freq === 'yearly' ? clampInt_(params.month !== undefined ? params.month : cur.month, 1, 12) : '';
+
+      var rec = {
+        id: cur.id,
+        title: params.title !== undefined ? String(params.title).trim() : cur.title,
+        priority: params.priority || cur.priority || DEFAULT_PRIORITY,
+        assignees: params.assignees !== undefined ? String(params.assignees) : cur.assignees,
+        freq: freq,
+        month: month,
+        day: day,
+        nextDue: computeFirstDue_(freq, month, day),
+        active: params.active !== undefined ? String(params.active) : (cur.active || 'true'),
+        createdAt: cur.createdAt || now_()
+      };
+      if (!rec.title) throw new Error('title is required');
+
+      sheet.getRange(rowIndex, 1, 1, RECUR_COLUMNS.length)
+           .setValues([RECUR_COLUMNS.map(function (col) { return rec[col]; })]);
+      runRecurringCore_();
+      return {
+        recurring: readRows_(getRecurSheet_(), RECUR_COLUMNS),
+        tasks: readRows_(getSheet_(), COLUMNS),
+        archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS)
+      };
+    }
+    throw new Error('recurring not found: ' + params.id);
   } finally {
     lock.releaseLock();
   }
