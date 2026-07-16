@@ -23,6 +23,7 @@
     recurring: [],
     archive: [],
     view: 'open',                 // 'open' | 'done' | 'recurring' | 'settings' | 'archive'
+    composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
     composerAssignees: [],        // 追加フォームで選択中の確認対象者
     assigneeOptions: loadAssignees()
@@ -37,6 +38,8 @@
   var $prioBtn = document.getElementById('prioBtn');
   var $composerTags = document.getElementById('composerTags');
   var $archiveBtn = document.getElementById('archiveBtn');
+  var $fab = document.getElementById('fab');
+  var $composerBackdrop = document.getElementById('composerBackdrop');
   var $toast = document.getElementById('toast');
 
   // ================= 確認対象者リスト（端末に保存） =================
@@ -232,9 +235,7 @@
     });
     done.sort(function (a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); });
 
-    // 入力ドックはタスク一覧（未完了/完了）でのみ表示
-    var showDock = state.view === 'open' || state.view === 'done';
-    $dock.style.display = showDock ? '' : 'none';
+    updateComposerVisibility();
 
     $list.innerHTML = '';
 
@@ -1006,6 +1007,24 @@
     $prioBtn.style.setProperty('--c', m.color);
   }
 
+  // 入力ドックの開閉（未完了/完了タブでのみ丸ボタン⇄入力欄）
+  function updateComposerVisibility() {
+    var canCompose = state.view === 'open' || state.view === 'done';
+    $dock.style.display = (canCompose && state.composerOpen) ? '' : 'none';
+    $fab.style.display = (canCompose && !state.composerOpen) ? '' : 'none';
+    $composerBackdrop.classList.toggle('show', canCompose && state.composerOpen);
+  }
+  function openComposer() {
+    state.composerOpen = true;
+    updateComposerVisibility();
+    $titleInput.focus();
+  }
+  function closeComposer() {
+    state.composerOpen = false;
+    if (document.activeElement) document.activeElement.blur();
+    updateComposerVisibility();
+  }
+
   function buildComposerTags() {
     $composerTags.innerHTML = '';
     state.assigneeOptions.forEach(function (name) {
@@ -1048,11 +1067,15 @@
       $titleInput.focus();
     });
 
+    $fab.addEventListener('click', openComposer);
+    $composerBackdrop.addEventListener('click', closeComposer);
+
     document.querySelectorAll('.tab').forEach(function (tab) {
       tab.addEventListener('click', function () {
         document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('is-active'); });
         tab.classList.add('is-active');
         state.view = tab.dataset.view;
+        state.composerOpen = false;
         render();
       });
     });
