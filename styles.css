@@ -306,8 +306,9 @@ html, body {
   flex-direction: column;
 }
 .task.expanded .task-edit { display: flex; }
-/* 開いているタスク行も少し色を変えて連続感を出す */
-.task.expanded .task-main { background: var(--card-2); }
+/* 開いているタスク行（見出し＋詳細要約）を同じ色にして連続感を出す */
+.task.expanded .task-main,
+.task.expanded .task-meta { background: var(--card-2); }
 
 .field-label {
   font-size: 11px;
