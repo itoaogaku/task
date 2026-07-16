@@ -39,6 +39,7 @@
   var $prioBtn = document.getElementById('prioBtn');
   var $composerTags = document.getElementById('composerTags');
   var $archiveBtn = document.getElementById('archiveBtn');
+  var $archiveDateInput = document.getElementById('archiveDateInput');
   var $fab = document.getElementById('fab');
   var $closeFab = document.getElementById('closeFab');
   var $composerBackdrop = document.getElementById('composerBackdrop');
@@ -849,11 +850,11 @@
     }).finally(function () { loading(false); });
   }
 
-  function addArchive(text) {
+  function addArchive(text, createdAt) {
     var tempId = 'tmp-' + Date.now();
     var entry = {
       id: tempId, text: text, priority: state.composerPriority,
-      assignees: state.composerAssignees.join(' '), createdAt: nowLocal()
+      assignees: state.composerAssignees.join(' '), createdAt: createdAt || nowLocal()
     };
     state.archive.unshift(entry);
     if (state.view === 'archive') render();
@@ -1077,9 +1078,11 @@
     // 項目を開いている時は丸ボタンを隠す
     $fab.style.display = (canCompose && !state.composerOpen && !anyExpanded) ? '' : 'none';
     $composerBackdrop.classList.toggle('show', canCompose && state.composerOpen);
-    // 保管タブでは「保管専用」入力。保管ボタンは不要なので隠し、案内文を変える
+    // 保管タブでは「保管専用」入力。保管ボタンは不要なので隠し、案内文を変え、日付選択を出す
     var isArchive = state.view === 'archive';
     $archiveBtn.style.display = isArchive ? 'none' : '';
+    $archiveDateInput.style.display = isArchive ? '' : 'none';
+    if (isArchive && !$archiveDateInput.value) $archiveDateInput.value = toDateInputValue(nowLocal());
     $titleInput.placeholder = isArchive ? '記録を保管…（保管のみ）' : 'タスクを入力して追加…';
   }
   function openComposer() {
@@ -1123,8 +1126,15 @@
       e.preventDefault();
       var title = $titleInput.value.trim();
       if (!title) return;
-      if (state.view === 'archive') addArchive(title); // 保管タブでは保管のみ
-      else addTask(title);
+      if (state.view === 'archive') {
+        var created;
+        if ($archiveDateInput.value) {
+          created = $archiveDateInput.value.replace(/-/g, '/') + ' ' + nowLocal().slice(11, 16);
+        }
+        addArchive(title, created); // 保管タブでは保管のみ（選択した日付で）
+      } else {
+        addTask(title);
+      }
       $titleInput.value = '';
       $titleInput.focus();
     });

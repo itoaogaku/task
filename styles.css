@@ -465,6 +465,17 @@ html, body {
   cursor: pointer;
 }
 .archive-btn:active { opacity: .6; }
+.archive-date-input {
+  flex: none;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: none;
+  border-radius: 15px;
+  font-family: inherit;
+}
 .prio-btn {
   flex: none;
   min-width: 34px;
