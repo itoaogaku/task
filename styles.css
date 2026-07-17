@@ -699,6 +699,7 @@ html, body {
   gap: 16px;
   max-width: calc(100% - 24px);
   padding: 9px 10px 9px 16px;
+  white-space: nowrap;   /* メッセージとボタンを1段（横並び）で表示 */
   font-size: 13px;
   color: #fff;
   background: rgba(44, 44, 46, 0.98);
