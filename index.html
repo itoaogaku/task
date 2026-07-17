@@ -65,16 +65,20 @@
   <script>
   (function () {
     var box = document.createElement('div');
-    box.style.cssText = 'position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);z-index:2147483647;background:rgba(200,0,0,.94);color:#fff;font:15px/1.6 monospace;padding:10px 14px;white-space:pre;pointer-events:none;border-radius:8px;';
+    box.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483647;background:rgba(200,0,0,.94);color:#fff;font:15px/1.7 monospace;padding:8px 12px;white-space:pre;pointer-events:none;border-radius:0 0 10px 0;';
     document.body.appendChild(box);
     var R = Math.round;
     function upd() {
       var vv = window.visualViewport, s = '';
+      // 実際に見えている領域の左上に枠を追従させる（数値が必ず読めるように）
+      if (vv) { box.style.top = R(vv.offsetTop) + 'px'; box.style.left = R(vv.offsetLeft) + 'px'; }
       s += 'innerH=' + window.innerHeight + '  scrollY=' + R(window.pageYOffset);
       if (vv) s += '\nvv.h=' + R(vv.height) + '  vv.offTop=' + R(vv.offsetTop) + '  vv.pageTop=' + R(vv.pageTop);
       s += '\n--app-h=' + (getComputedStyle(document.documentElement).getPropertyValue('--app-h').trim() || '(unset)');
       var app = document.querySelector('.app');
-      if (app) { var r = app.getBoundingClientRect(); s += '\napp: top=' + R(r.top) + ' bottom=' + R(r.bottom) + ' h=' + R(r.height); }
+      if (app) { var r = app.getBoundingClientRect(); s += '\napp: top=' + R(r.top) + ' bot=' + R(r.bottom) + ' h=' + R(r.height); }
+      var dk = document.getElementById('dock');
+      if (dk) { var dr = dk.getBoundingClientRect(); s += '\ndock: top=' + R(dr.top) + ' bot=' + R(dr.bottom); }
       box.textContent = s;
     }
     if (window.visualViewport) {
@@ -82,7 +86,7 @@
       window.visualViewport.addEventListener('scroll', upd);
     }
     window.addEventListener('scroll', upd, true);
-    setInterval(upd, 150);
+    setInterval(upd, 120);
     upd();
   })();
   </script>
