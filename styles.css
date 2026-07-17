@@ -83,12 +83,14 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
   overscroll-behavior-y: none;
+  height: 100%;
+  overflow: hidden;          /* ページ自体はスクロールさせない（一覧のみ内部スクロール） */
 }
 
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  height: 100dvh;
   max-width: var(--app-max);
   margin: 0 auto;
 }
@@ -157,6 +159,9 @@ html, body {
 /* ===== リスト（グループ化インセット） ===== */
 .list {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 10px var(--pad-x) 92px;
 }
 .empty {

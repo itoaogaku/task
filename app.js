@@ -1215,13 +1215,20 @@
     $repeatBtn.classList.toggle('on', state.composerRepeat !== 'none');
   }
   // キーボード表示中も入力ドックをキーボード直上に固定し続ける（iOSでのズレ・隙間対策）
+  // rAF でまとめ、値が変わった時だけ書き込むことでガタつきを防ぐ
+  var lastOverlap = -1, dockRaf = 0;
   function syncDock() {
-    var vv = window.visualViewport;
-    if (!vv) return;
-    // レイアウト下端から見て、キーボード等で隠れている下部の高さ
-    var overlap = window.innerHeight - vv.height - vv.offsetTop;
-    if (overlap < 1) overlap = 0;
-    $dock.style.transform = overlap ? ('translateY(' + (-overlap) + 'px)') : '';
+    if (dockRaf) return;
+    dockRaf = requestAnimationFrame(function () {
+      dockRaf = 0;
+      var vv = window.visualViewport;
+      if (!vv) return;
+      var overlap = window.innerHeight - vv.height - vv.offsetTop; // 下部でキーボード等に隠れる高さ
+      if (overlap < 1) overlap = 0;
+      if (overlap === lastOverlap) return;
+      lastOverlap = overlap;
+      $dock.style.transform = overlap ? ('translateY(' + (-overlap) + 'px)') : '';
+    });
   }
   function openComposer() {
     state.composerOpen = true;
@@ -1234,6 +1241,7 @@
     state.composerOpen = false;
     if (document.activeElement) document.activeElement.blur();
     updateComposerVisibility();
+    lastOverlap = -1;
     $dock.style.transform = '';
   }
 
