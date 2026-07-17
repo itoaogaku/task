@@ -672,7 +672,8 @@ html, body {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 92px;
+  top: calc(var(--safe-top) + 64px);   /* 「取り消す」バーと同じ上部中央に表示 */
+  bottom: auto;
   transform: translateX(-50%);
   z-index: 40;
   padding: 9px 16px;
