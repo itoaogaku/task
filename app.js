@@ -1348,6 +1348,18 @@
     }
     window.addEventListener('orientationchange', function () { setTimeout(setAppHeight, 150); });
 
+    // 一覧内の入力欄（詳細メモ・確認先追加・メモ編集など）にフォーカスしたら、
+    // キーボードに隠れないよう見える位置までスクロールする（固定レイアウトでは
+    // iOSの自動スクロールが効かないため自前で行う）
+    $list.addEventListener('focusin', function (e) {
+      var t = e.target;
+      if (!t || (t.tagName !== 'TEXTAREA' && t.tagName !== 'INPUT')) return;
+      setTimeout(function () {
+        try { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        catch (_) { t.scrollIntoView(); }
+      }, 300); // キーボード表示・アプリ高さ調整の後にスクロール
+    });
+
     // 通信が復帰したら未送信タスクを自動で再送
     window.addEventListener('online', flushOutbox);
     // 画面に戻ってきた（アプリ復帰）ときも再送を試みる
