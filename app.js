@@ -1319,6 +1319,12 @@
       updateRepeatBtn();
     });
 
+    // 日付を選び終わったら文字キーボードを戻す（続けて入力できるように）。
+    // ※iOSでは日付ピッカーと文字キーボードは同時に出せない仕様のため、選択中は一旦閉じる。
+    $archiveDateInput.addEventListener('change', function () {
+      if (state.view === 'archive' && state.composerOpen) $titleInput.focus();
+    });
+
     $fab.addEventListener('click', openComposer);
     $closeFab.addEventListener('click', closeComposer);
     $composerBackdrop.addEventListener('click', closeComposer);
