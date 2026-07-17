@@ -60,5 +60,31 @@
 
   <script src="./config.js"></script>
   <script src="./app.js"></script>
+
+  <!-- ▼一時デバッグ（visualViewport数値表示）。原因特定後に削除します -->
+  <script>
+  (function () {
+    var box = document.createElement('div');
+    box.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483647;background:rgba(200,0,0,.92);color:#fff;font:12px/1.45 monospace;padding:6px 8px;white-space:pre;pointer-events:none;';
+    document.body.appendChild(box);
+    var R = Math.round;
+    function upd() {
+      var vv = window.visualViewport, s = '';
+      s += 'innerH=' + window.innerHeight + '  scrollY=' + R(window.pageYOffset);
+      if (vv) s += '\nvv.h=' + R(vv.height) + '  vv.offTop=' + R(vv.offsetTop) + '  vv.pageTop=' + R(vv.pageTop);
+      s += '\n--app-h=' + (getComputedStyle(document.documentElement).getPropertyValue('--app-h').trim() || '(unset)');
+      var app = document.querySelector('.app');
+      if (app) { var r = app.getBoundingClientRect(); s += '\napp: top=' + R(r.top) + ' bottom=' + R(r.bottom) + ' h=' + R(r.height); }
+      box.textContent = s;
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', upd);
+      window.visualViewport.addEventListener('scroll', upd);
+    }
+    window.addEventListener('scroll', upd, true);
+    setInterval(upd, 150);
+    upd();
+  })();
+  </script>
 </body>
 </html>
