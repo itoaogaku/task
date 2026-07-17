@@ -1200,9 +1200,8 @@
     $dock.style.display = (canCompose && state.composerOpen) ? '' : 'none';
     // 項目を開いている時は丸ボタンを隠す
     $fab.style.display = (canCompose && !state.composerOpen && !anyExpanded) ? '' : 'none';
-    $composerBackdrop.classList.toggle('show', canCompose && state.composerOpen);
-    // 入力ドックを開いている間は一覧の下部余白を広げる（最後の項目がドックに隠れない）
-    document.body.classList.toggle('composing', canCompose && state.composerOpen);
+    // 背景は覆わない（入力を開いたままでも裏の一覧をスクロール・操作できる）。
+    // 閉じるのは「閉じる」ボタンから。
     // 保管タブでは「保管専用」入力。保管ボタンは隠し、日付選択・繰り返し設定を出す
     var isArchive = state.view === 'archive';
     $archiveBtn.style.display = isArchive ? 'none' : '';
@@ -1216,35 +1215,25 @@
     $repeatBtn.textContent = REPEAT_LABELS[normalizeRepeat(state.composerRepeat)];
     $repeatBtn.classList.toggle('on', state.composerRepeat !== 'none');
   }
-  // キーボード表示中も入力ドックをキーボード直上に固定し続ける（iOSでのズレ・隙間対策）
-  // rAF でまとめ、値が変わった時だけ書き込むことでガタつきを防ぐ
-  var lastOverlap = -1, dockRaf = 0;
-  function syncDock() {
-    if (dockRaf) return;
-    dockRaf = requestAnimationFrame(function () {
-      dockRaf = 0;
-      var vv = window.visualViewport;
-      if (!vv) return;
-      var overlap = window.innerHeight - vv.height - vv.offsetTop; // 下部でキーボード等に隠れる高さ
-      if (overlap < 1) overlap = 0;
-      if (overlap === lastOverlap) return;
-      lastOverlap = overlap;
-      $dock.style.transform = overlap ? ('translateY(' + (-overlap) + 'px)') : '';
-    });
+  // アプリの高さをビジュアルビューポート（キーボードを除いた表示領域）に合わせる。
+  // これで入力ドックが常にキーボードの直上に収まり、裏の一覧は内部スクロールできる。
+  var lastH = -1;
+  function setAppHeight() {
+    var vv = window.visualViewport;
+    var h = Math.round(vv ? vv.height : window.innerHeight);
+    if (h === lastH) return;
+    lastH = h;
+    document.documentElement.style.setProperty('--app-h', h + 'px');
   }
   function openComposer() {
     state.composerOpen = true;
     updateComposerVisibility();
     $titleInput.focus();
-    syncDock();
-    setTimeout(syncDock, 300); // キーボードのアニメーション後にも再調整
   }
   function closeComposer() {
     state.composerOpen = false;
     if (document.activeElement) document.activeElement.blur();
     updateComposerVisibility();
-    lastOverlap = -1;
-    $dock.style.transform = '';
   }
 
   function buildComposerTags() {
@@ -1344,12 +1333,11 @@
 
     document.getElementById('reloadBtn').addEventListener('click', load);
 
-    // キーボードの開閉（＝ビューポート高さの変化）時だけドック位置を補正する。
-    // スクロール追従はしない（一覧は内部スクロールで固定ドックは動かないため、
-    // scroll に追従すると逆にガタつく）
+    // キーボード開閉でビューポート高さが変わったらアプリの高さを合わせる
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', syncDock);
+      window.visualViewport.addEventListener('resize', setAppHeight);
     }
+    window.addEventListener('orientationchange', function () { setTimeout(setAppHeight, 150); });
 
     // 通信が復帰したら未送信タスクを自動で再送
     window.addEventListener('online', flushOutbox);
@@ -1367,6 +1355,7 @@
     buildComposerTags();
     updatePrioBtn();
     bindEvents();
+    setAppHeight();             // アプリ高さをビューポートに合わせる
     updateComposerVisibility(); // 読み込み前に入力UIを隠しておく（丸＋/−の同時表示を防ぐ）
     load();
   }

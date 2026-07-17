@@ -90,7 +90,7 @@ html, body {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   max-width: var(--app-max);
   margin: 0 auto;
 }
@@ -164,8 +164,6 @@ html, body {
   -webkit-overflow-scrolling: touch;
   padding: 10px var(--pad-x) calc(28px + var(--safe-bottom));
 }
-/* 入力ドックを開いている間だけ、下部を広げて最後の項目がドックに隠れないようにする */
-body.composing .list { padding-bottom: calc(112px + var(--safe-bottom)); }
 .empty {
   padding: 60px 16px;
   text-align: center;
@@ -398,12 +396,12 @@ body.composing .list { padding-bottom: calc(112px + var(--safe-bottom)); }
 .text-btn.danger { color: var(--red); }
 
 /* ===== 下部固定ドック（定期パネル + 入力バー） ===== */
+/* 入力ドックはレイアウトの一番下に配置（固定配置にしない）。
+   アプリ高さをキーボードの上に合わせるので、常にキーボード直上に収まる。 */
 .dock {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
+  position: relative;   /* close-fab(absolute) の基準 */
+  flex: none;
   z-index: 30;
-  max-width: var(--app-max);
-  margin: 0 auto;
   padding-bottom: var(--safe-bottom);
   background: var(--header-bg);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -411,16 +409,6 @@ body.composing .list { padding-bottom: calc(112px + var(--safe-bottom)); }
   border-top: 0.5px solid var(--sep);
 }
 .composer { padding: 8px var(--pad-x) 10px; }
-/* ドックの下（キーボードとの隙間）に背景タスクが覗かないよう不透明の下地を延ばす */
-.dock::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0;
-  top: 100%;
-  height: 100vh;
-  background: var(--bg);
-  pointer-events: none;
-}
 
 /* 折りたたみ時の丸ボタン（FAB） */
 .fab {
