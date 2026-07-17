@@ -265,9 +265,9 @@ html, body {
   border: 1.5px solid var(--done-ring);
   border-radius: 50%;
   cursor: pointer;
-  transition: transform .1s ease, opacity .1s ease;
+  transition: opacity .1s ease;
 }
-.done-btn:active { transform: scale(0.85); }
+.done-btn:active { opacity: .5; }
 
 /* 確認先（完了ボタンのすぐ左に inline 表示） */
 .task-assignees {
@@ -561,12 +561,12 @@ html, body {
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  transition: transform .1s ease, opacity .1s;
+  transition: opacity .1s;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.add-btn:active { transform: scale(0.88); opacity: .85; }
+.add-btn:active { opacity: .6; }
 
 .composer-tags {
   display: flex;
