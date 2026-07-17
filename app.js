@@ -1217,13 +1217,13 @@
   }
   // アプリの高さをビジュアルビューポート（キーボードを除いた表示領域）に合わせる。
   // これで入力ドックが常にキーボードの直上に収まり、裏の一覧は内部スクロールできる。
-  var lastH = -1, lastTop = -1;
+  var lastH = -1;
   function setAppHeight() {
     var vv = window.visualViewport;
     var h = Math.round(vv ? vv.height : window.innerHeight);
-    var top = Math.round(vv ? vv.offsetTop : 0);
-    if (h !== lastH) { lastH = h; document.documentElement.style.setProperty('--app-h', h + 'px'); }
-    if (top !== lastTop) { lastTop = top; document.documentElement.style.setProperty('--app-top', top + 'px'); }
+    if (h === lastH) return;
+    lastH = h;
+    document.documentElement.style.setProperty('--app-h', h + 'px');
   }
   function openComposer() {
     state.composerOpen = true;
