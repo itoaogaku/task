@@ -90,9 +90,14 @@ html, body {
 .app {
   display: flex;
   flex-direction: column;
-  height: var(--app-h, 100dvh);
-  max-width: var(--app-max);
+  /* 固定配置にして iOS がフォーカス時に勝手にスクロールしないようにする。
+     高さはキーボードを除いた表示領域(--app-h)に合わせる。 */
+  position: fixed;
+  top: var(--app-top, 0px);
+  left: 0; right: 0;
   margin: 0 auto;
+  max-width: var(--app-max);
+  height: var(--app-h, 100dvh);
 }
 
 /* ===== ヘッダー（ナビバー + セグメント） ===== */
