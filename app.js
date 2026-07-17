@@ -926,7 +926,7 @@
     var wrap = document.createElement('div');
     wrap.className = 'task-edit';
     var ta = document.createElement('textarea');
-    ta.className = 'memo';
+    ta.className = 'memo memo-edit';
     ta.value = m.text || '';
     var saveBtn = document.createElement('button');
     saveBtn.type = 'button';

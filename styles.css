@@ -378,6 +378,7 @@ html, body {
 .memo:focus, .composer-input:focus { outline: none; }
 /* メモタブの入力欄・一覧 */
 .memo-quick { min-height: 176px; margin-bottom: 10px; }
+.memo-edit { min-height: 200px; }   /* メモ編集時の記入欄を広く */
 .memo-text { white-space: pre-wrap; }
 
 .save-btn {
