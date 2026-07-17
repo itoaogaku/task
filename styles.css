@@ -83,8 +83,13 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
   overscroll-behavior-y: none;
+  /* ページ(body)を完全にロック。iOS がフォーカス時に勝手にスクロールするのを防ぐ。
+     スクロールは一覧(.list)の内部のみ。 */
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%;
   height: 100%;
-  overflow: hidden;          /* ページ自体はスクロールさせない（一覧のみ内部スクロール） */
+  overflow: hidden;
 }
 
 .app {
