@@ -1169,12 +1169,33 @@
       tag.type = 'button';
       tag.className = 'tag' + (state.composerAssignees.indexOf(name) >= 0 ? ' on' : '');
       tag.textContent = name;
-      // タップで入力欄のフォーカス（キーボード）を奪わない＝キーボードを閉じない
-      tag.addEventListener('mousedown', function (e) { e.preventDefault(); });
-      tag.addEventListener('click', function () {
+      function toggle() {
         var i = state.composerAssignees.indexOf(name);
         if (i >= 0) { state.composerAssignees.splice(i, 1); tag.classList.remove('on'); }
         else { state.composerAssignees.push(name); tag.classList.add('on'); }
+        // 入力欄のフォーカス（キーボード）を維持する
+        if (state.composerOpen && document.activeElement !== $titleInput) $titleInput.focus();
+      }
+      // タップとスクロールを区別。タップ時は touchend で既定動作(フォーカス移動)を
+      // 止めることで、iOS でもキーボードを閉じずに選択できる。
+      var sx = 0, sy = 0, moved = false, handled = false;
+      tag.addEventListener('touchstart', function (e) {
+        var t = e.touches[0]; sx = t.clientX; sy = t.clientY; moved = false; handled = false;
+      }, { passive: true });
+      tag.addEventListener('touchmove', function (e) {
+        var t = e.touches[0];
+        if (Math.abs(t.clientX - sx) > 8 || Math.abs(t.clientY - sy) > 8) moved = true;
+      }, { passive: true });
+      tag.addEventListener('touchend', function (e) {
+        handled = true;
+        if (moved) return;      // 横スクロール操作 → 選択しない
+        e.preventDefault();     // タップ → キーボードを閉じない（click も抑止）
+        toggle();
+      });
+      tag.addEventListener('mousedown', function (e) { e.preventDefault(); }); // PC: フォーカス維持
+      tag.addEventListener('click', function () {
+        if (handled) { handled = false; return; } // タッチで処理済み
+        toggle();
       });
       $composerTags.appendChild(tag);
     });
