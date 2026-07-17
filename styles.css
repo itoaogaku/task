@@ -103,8 +103,6 @@ html, body {
   margin: 0 auto;
   max-width: var(--app-max);
   height: var(--app-h, 100dvh);
-  /* キーボード開閉時の高さ・位置変化を滑らかに（ガタンを緩和） */
-  transition: top 0.2s ease, height 0.2s ease;
 }
 
 /* ===== ヘッダー（ナビバー + セグメント） ===== */
