@@ -365,7 +365,7 @@ html, body {
 
 .memo {
   width: 100%;
-  min-height: 128px;
+  min-height: 92px;
   padding: 8px 10px;
   font-size: 15px;
   color: var(--text);

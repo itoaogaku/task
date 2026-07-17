@@ -1354,9 +1354,14 @@
     $list.addEventListener('focusin', function (e) {
       var t = e.target;
       if (!t || (t.tagName !== 'TEXTAREA' && t.tagName !== 'INPUT')) return;
+      // タスクを編集中は、そのタスクのタイトルごと見えるよう先頭に寄せる。
+      // それ以外（メモ/確認先）は対象欄を中央に。
+      var task = t.closest ? t.closest('.task') : null;
+      var target = task || t;
+      var block = task ? 'start' : 'center';
       setTimeout(function () {
-        try { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-        catch (_) { t.scrollIntoView(); }
+        try { target.scrollIntoView({ block: block, behavior: 'smooth' }); }
+        catch (_) { target.scrollIntoView(); }
       }, 300); // キーボード表示・アプリ高さ調整の後にスクロール
     });
 
