@@ -1195,7 +1195,8 @@
   // 入力ドックの開閉（タスク/完了タブでのみ丸ボタン⇄入力欄）
   function updateComposerVisibility() {
     // 初回読み込みが終わるまでは入力UI（丸＋・入力ドック）を一切出さない
-    var canCompose = state.ready && (state.view === 'open' || state.view === 'done' || state.view === 'archive');
+    // 完了タブでは入力(丸＋)は出さない
+    var canCompose = state.ready && (state.view === 'open' || state.view === 'archive');
     var anyExpanded = !!$list.querySelector('.task.expanded');
     $dock.style.display = (canCompose && state.composerOpen) ? '' : 'none';
     // 項目を開いている時は丸ボタンを隠す
