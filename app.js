@@ -1342,10 +1342,11 @@
 
     document.getElementById('reloadBtn').addEventListener('click', load);
 
-    // キーボードの開閉・スクロールに追従して入力ドックを固定し続ける
+    // キーボードの開閉（＝ビューポート高さの変化）時だけドック位置を補正する。
+    // スクロール追従はしない（一覧は内部スクロールで固定ドックは動かないため、
+    // scroll に追従すると逆にガタつく）
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', syncDock);
-      window.visualViewport.addEventListener('scroll', syncDock);
     }
 
     // 通信が復帰したら未送信タスクを自動で再送
