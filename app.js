@@ -1201,6 +1201,8 @@
     // 項目を開いている時は丸ボタンを隠す
     $fab.style.display = (canCompose && !state.composerOpen && !anyExpanded) ? '' : 'none';
     $composerBackdrop.classList.toggle('show', canCompose && state.composerOpen);
+    // 入力ドックを開いている間は一覧の下部余白を広げる（最後の項目がドックに隠れない）
+    document.body.classList.toggle('composing', canCompose && state.composerOpen);
     // 保管タブでは「保管専用」入力。保管ボタンは隠し、日付選択・繰り返し設定を出す
     var isArchive = state.view === 'archive';
     $archiveBtn.style.display = isArchive ? 'none' : '';

@@ -162,8 +162,10 @@ html, body {
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 10px var(--pad-x) 92px;
+  padding: 10px var(--pad-x) calc(28px + var(--safe-bottom));
 }
+/* 入力ドックを開いている間だけ、下部を広げて最後の項目がドックに隠れないようにする */
+body.composing .list { padding-bottom: calc(112px + var(--safe-bottom)); }
 .empty {
   padding: 60px 16px;
   text-align: center;
