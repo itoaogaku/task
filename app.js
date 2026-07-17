@@ -18,6 +18,7 @@
   var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'ie', p3: 'ie' };
   var ASSIGNEE_STORE = 'assignee_options_v1';
   var OUTBOX_STORE = 'task_outbox_v1';   // 未送信タスク（通信失敗時も端末に保持）
+  var CACHE_STORE = 'task_cache_v1';     // 前回の一覧データ（起動時に即表示するため）
 
   // 保管の繰り返し設定（none=登録のみ / monthly=毎月 / yearly=毎年）
   var REPEAT_LABELS = { none: '登録', monthly: '毎月', yearly: '毎年' };
@@ -927,18 +928,49 @@
   }
 
   // ================= 操作（楽観的更新） =================
+  // 一覧データ（tasks/archive/memos）を state へ適用し、未送信タスクを先頭に復元する
+  function applyListData(d) {
+    var tasks = (d && d.tasks) || [];
+    var serverIds = {};
+    tasks.forEach(function (t) { serverIds[t.id] = true; });
+    // サーバーに既にある分（送信済み）はキューから除去
+    var stillPending = loadOutbox().filter(function (x) { return !serverIds[x.id]; });
+    saveOutbox(stillPending);
+    state.tasks = stillPending.map(outboxToTask).concat(tasks);
+    state.archive = (d && d.archive) || [];
+    state.memos = (d && d.memos) || [];
+  }
+
+  function loadCache() {
+    try { var s = localStorage.getItem(CACHE_STORE); if (s) return JSON.parse(s); } catch (e) { /* noop */ }
+    return null;
+  }
+  function saveCache(d) {
+    try {
+      localStorage.setItem(CACHE_STORE, JSON.stringify({
+        tasks: (d && d.tasks) || [],
+        archive: (d && d.archive) || [],
+        memos: (d && d.memos) || [],
+        assignees: (d && d.assignees) || []
+      }));
+    } catch (e) { /* noop */ }
+  }
+
   function load() {
+    // 1) 前回のキャッシュがあれば即表示（体感を速く）。裏で最新を取得して差し替える。
+    var cached = loadCache();
+    if (cached) {
+      applyListData(cached);
+      if ((cached.assignees || []).length) state.assigneeOptions = cached.assignees;
+      buildComposerTags();
+      state.ready = true;
+      render();
+    }
+
+    // 2) バックグラウンドで最新を取得
     loading(true);
     api('list').then(function (d) {
-      state.tasks = (d && d.tasks) || [];
-      // 未送信タスクを先頭に復元。サーバーに既にある分（送信済み）はキューから除去
-      var serverIds = {};
-      state.tasks.forEach(function (t) { serverIds[t.id] = true; });
-      var stillPending = loadOutbox().filter(function (x) { return !serverIds[x.id]; });
-      saveOutbox(stillPending);
-      state.tasks = stillPending.map(outboxToTask).concat(state.tasks);
-      state.archive = (d && d.archive) || [];
-      state.memos = (d && d.memos) || [];
+      applyListData(d);
       var serverAssignees = (d && d.assignees) || [];
       if (serverAssignees.length) {
         state.assigneeOptions = serverAssignees;
@@ -949,9 +981,10 @@
         if (seed.length) saveAssignees();
       }
       buildComposerTags();
+      saveCache(d);         // 最新をキャッシュ（次回起動で即表示）
       render();
     }).catch(function (e) {
-      toast('読み込み失敗: ' + e.message);
+      if (!cached) toast('読み込み失敗: ' + e.message); // キャッシュ表示中は黙って継続
     }).finally(function () {
       loading(false);
       state.ready = true;   // 読み込み完了（失敗時も）後に入力UIを表示
