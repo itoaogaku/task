@@ -466,6 +466,35 @@ function removeRecurringSheet() {
   if (sheet) ss.deleteSheet(sheet);
 }
 
+// タスクの重複行を除去する（同じ title/priority/assignees/status を1件に）。
+// エディタ上部の関数選択で「dedupeTasks」を選び「実行」を1回押すと掃除されます。
+// ※ 内容・状態が完全一致する行のみ削除し、最初の1件を残します。実行前にシートのバックアップ推奨。
+function dedupeTasks() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var sheet = getSheet_();
+    var last = sheet.getLastRow();
+    if (last < 3) return 0;
+    var vals = sheet.getRange(2, 1, last - 1, COLUMNS.length).getValues();
+    var idx = {}; COLUMNS.forEach(function (c, i) { idx[c] = i; });
+    var seen = {}, toDelete = [];
+    for (var r = 0; r < vals.length; r++) {
+      var row = vals[r];
+      if (!row[idx.id]) continue;
+      var key = [row[idx.title], row[idx.priority], row[idx.assignees], row[idx.status]].join('');
+      if (seen[key]) toDelete.push(r + 2); // 2行目始まり
+      else seen[key] = true;
+    }
+    toDelete.sort(function (a, b) { return b - a; }); // 下から削除
+    toDelete.forEach(function (rn) { sheet.deleteRow(rn); });
+    Logger.log('dedupeTasks: 削除 ' + toDelete.length + ' 行');
+    return toDelete.length;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ===== ヘルパー =====
 function getSheet_() {
   return ensureSheet_(SHEET_NAME, COLUMNS);
