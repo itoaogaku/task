@@ -1217,13 +1217,15 @@
   }
   // アプリの高さをビジュアルビューポート（キーボードを除いた表示領域）に合わせる。
   // これで入力ドックが常にキーボードの直上に収まり、裏の一覧は内部スクロールできる。
-  var lastH = -1;
+  // アプリを、実際に見えている領域（キーボードを除いたビジュアルビューポート）に
+  // ぴったり合わせる。高さ=vv.height、位置=vv.offsetTop（iOSのフォーカス時ずれを打ち消す）。
+  var lastH = -1, lastTop = -1;
   function setAppHeight() {
     var vv = window.visualViewport;
     var h = Math.round(vv ? vv.height : window.innerHeight);
-    if (h === lastH) return;
-    lastH = h;
-    document.documentElement.style.setProperty('--app-h', h + 'px');
+    var top = Math.round(vv ? vv.offsetTop : 0);
+    if (h !== lastH) { lastH = h; document.documentElement.style.setProperty('--app-h', h + 'px'); }
+    if (top !== lastTop) { lastTop = top; document.documentElement.style.setProperty('--app-top', top + 'px'); }
   }
   function openComposer() {
     state.composerOpen = true;
@@ -1333,9 +1335,10 @@
 
     document.getElementById('reloadBtn').addEventListener('click', load);
 
-    // キーボード開閉でビューポート高さが変わったらアプリの高さを合わせる
+    // キーボード開閉(resize)・iOSのフォーカス時ずれ(scroll)にアプリを合わせる
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', setAppHeight);
+      window.visualViewport.addEventListener('scroll', setAppHeight);
     }
     window.addEventListener('orientationchange', function () { setTimeout(setAppHeight, 150); });
 
