@@ -486,6 +486,31 @@ html, body {
   cursor: pointer;
 }
 .archive-btn:active { opacity: .6; }
+.archive-date-input {
+  flex: none;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: none;
+  border-radius: 15px;
+  font-family: inherit;
+}
+.repeat-btn {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--seg-bg);
+  border: none;
+  border-radius: 15px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.repeat-btn.on { color: #fff; background: var(--accent); }
+.repeat-btn:active { opacity: .6; }
 .repeat-tag {
   margin-left: 8px;
   padding: 1px 7px;
