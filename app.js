@@ -620,6 +620,12 @@
       repTag.textContent = REPEAT_LABELS[rep];
       text.appendChild(repTag);
     }
+    if (e.pending) {
+      var pc = document.createElement('span');
+      pc.className = 'pending-chip';
+      pc.textContent = '未送信';
+      text.appendChild(pc);
+    }
 
     // 日付変更（タップで日付ピッカー）
     var dateInput = document.createElement('input');
@@ -746,6 +752,7 @@
   }
 
   function saveArchiveFields(e, fields) {
+    if (e.pending) { toast('通信待ちです。送信後に変更できます'); render(); return; }
     var prev = {};
     Object.keys(fields).forEach(function (k) { prev[k] = e[k]; e[k] = fields[k]; });
     render();
@@ -764,32 +771,26 @@
   }
 
   function addArchive(text, createdAt, repeat) {
-    var tempId = 'tmp-' + Date.now();
-    var entry = {
-      id: tempId, text: text, priority: state.composerPriority,
+    var item = {
+      id: clientId(), type: 'archive', text: text, priority: state.composerPriority,
       assignees: state.composerAssignees.join(' '), createdAt: createdAt || nowLocal(),
-      repeat: normalizeRepeat(repeat), lastFired: ''
+      repeat: normalizeRepeat(repeat)
     };
-    state.archive.unshift(entry);
+    outboxAdd(item);                // まず端末に保存（通信が悪くても消えない）
+    state.archive.unshift(outboxToArchive(item));
     if (state.view === 'archive') render();
     toast('保管しました');
-
-    loading(true);
-    api('addArchive', { text: text, priority: entry.priority, assignees: entry.assignees, createdAt: entry.createdAt, repeat: entry.repeat })
-      .then(function (d) {
-        if (d && d.archive) state.archive = d.archive;
-        if (d && d.tasks) state.tasks = d.tasks;
-        render();
-      })
-      .catch(function (e) {
-        state.archive = state.archive.filter(function (x) { return x.id !== tempId; });
-        render();
-        toast('保管失敗: ' + e.message);
-      })
-      .finally(function () { loading(false); });
+    flushOutbox();
   }
 
   function removeArchive(e) {
+    // 未送信の保管はサーバーへ送らず、端末のキューごと削除
+    if (e.pending) {
+      state.archive = state.archive.filter(function (x) { return x.id !== e.id; });
+      outboxRemove(e.id);
+      render();
+      return;
+    }
     var backup = state.archive.slice();
     state.archive = state.archive.filter(function (x) { return x.id !== e.id; });
     render();
@@ -872,6 +873,12 @@
 
     var when = document.createElement('div');
     when.className = 'task-meta';
+    if (m.pending) {
+      var pc = document.createElement('span');
+      pc.className = 'pending-chip';
+      pc.textContent = '未送信';
+      when.appendChild(pc);
+    }
     var dc = document.createElement('span');
     dc.className = 'done-time';
     dc.textContent = fmtDateTimeJa(m.createdAt);
@@ -902,23 +909,16 @@
   }
 
   function addMemo(text) {
-    var tempId = 'tmp-' + Date.now();
-    var memo = { id: tempId, text: text, createdAt: nowLocal(), updatedAt: nowLocal() };
-    state.memos.unshift(memo);
+    var item = { id: clientId(), type: 'memo', text: text, createdAt: nowLocal() };
+    outboxAdd(item);                // まず端末に保存（通信が悪くても消えない）
+    state.memos.unshift(outboxToMemo(item));
     render();
     toast('メモを追加しました');
-    loading(true);
-    api('addMemo', { text: text }).then(function (d) {
-      if (d && d.memos) state.memos = d.memos;
-      render();
-    }).catch(function (e) {
-      state.memos = state.memos.filter(function (x) { return x.id !== tempId; });
-      render();
-      toast('追加失敗: ' + e.message);
-    }).finally(function () { loading(false); });
+    flushOutbox();
   }
 
   function updateMemo(m, text) {
+    if (m.pending) { toast('通信待ちです。送信後に変更できます'); return; }
     var prev = m.text;
     m.text = text;
     render();
@@ -934,6 +934,13 @@
   }
 
   function removeMemo(m) {
+    // 未送信メモはサーバーへ送らず、端末のキューごと削除
+    if (m.pending) {
+      state.memos = state.memos.filter(function (x) { return x.id !== m.id; });
+      outboxRemove(m.id);
+      render();
+      return;
+    }
     var backup = state.memos.slice();
     state.memos = state.memos.filter(function (x) { return x.id !== m.id; });
     render();
@@ -949,14 +956,20 @@
   // 一覧データ（tasks/archive/memos）を state へ適用し、未送信タスクを先頭に復元する
   function applyListData(d) {
     var tasks = (d && d.tasks) || [];
+    var archive = (d && d.archive) || [];
+    var memos = (d && d.memos) || [];
+    // サーバーに既に届いている分（送信済み）はキューから除去
     var serverIds = {};
     tasks.forEach(function (t) { serverIds[t.id] = true; });
-    // サーバーに既にある分（送信済み）はキューから除去
-    var stillPending = loadOutbox().filter(function (x) { return !serverIds[x.id]; });
-    saveOutbox(stillPending);
-    state.tasks = stillPending.map(outboxToTask).concat(tasks);
-    state.archive = (d && d.archive) || [];
-    state.memos = (d && d.memos) || [];
+    archive.forEach(function (a) { serverIds[a.id] = true; });
+    memos.forEach(function (m) { serverIds[m.id] = true; });
+    var outbox = loadOutbox().filter(function (x) { return !serverIds[x.id]; });
+    saveOutbox(outbox);
+    // 種類ごとに未送信分を先頭に復元
+    var isType = function (t) { return function (x) { return (x.type || 'task') === t; }; };
+    state.tasks = outbox.filter(isType('task')).map(outboxToTask).concat(tasks);
+    state.memos = outbox.filter(isType('memo')).map(outboxToMemo).concat(memos);
+    state.archive = outbox.filter(isType('archive')).map(outboxToArchive).concat(archive);
   }
 
   function loadCache() {
@@ -1026,6 +1039,11 @@
   function clientId() {
     return 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
   }
+  function outboxAdd(item) { var ob = loadOutbox(); ob.push(item); saveOutbox(ob); }
+  function outboxRemove(id) { saveOutbox(loadOutbox().filter(function (x) { return x.id !== id; })); }
+  function findIdx(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return i; return -1; }
+
+  // 未送信アイテム → 各一覧に表示するための楽観オブジェクト（pending 付き）
   function outboxToTask(item) {
     return {
       id: item.id, title: item.title, priority: item.priority, status: 'open',
@@ -1033,19 +1051,22 @@
       createdAt: item.createdAt, doneAt: '', updatedAt: '', pending: true
     };
   }
-  function indexById(id) {
-    for (var i = 0; i < state.tasks.length; i++) if (state.tasks[i].id === id) return i;
-    return -1;
+  function outboxToMemo(item) {
+    return { id: item.id, text: item.text, createdAt: item.createdAt, updatedAt: '', pending: true };
+  }
+  function outboxToArchive(item) {
+    return {
+      id: item.id, text: item.text, priority: item.priority, assignees: item.assignees || '',
+      createdAt: item.createdAt, repeat: normalizeRepeat(item.repeat), lastFired: '', pending: true
+    };
   }
 
   function addTask(title) {
     var item = {
-      id: clientId(), title: title, priority: state.composerPriority,
+      id: clientId(), type: 'task', title: title, priority: state.composerPriority,
       assignees: state.composerAssignees.join(' '), createdAt: nowLocal()
     };
-    var outbox = loadOutbox();
-    outbox.push(item);
-    saveOutbox(outbox);              // まず端末に保存（ここで内容は確定的に残る）
+    outboxAdd(item);                // まず端末に保存（ここで内容は確定的に残る）
     state.tasks.unshift(outboxToTask(item));
     render();
     flushOutbox();                  // 送信を試みる（失敗しても消えない）
@@ -1056,28 +1077,54 @@
     if (flushTimer) return;
     flushTimer = setTimeout(function () { flushTimer = null; flushOutbox(); }, 15000);
   }
-  // 未送信キューを先頭から順に送信。失敗したら残して後で再送。
+  // 未送信キューを先頭から順に送信。失敗したら残して後で再送。種類ごとに送り先を切替。
   function flushOutbox() {
     if (flushing) return;
     var outbox = loadOutbox();
     if (!outbox.length) return;
     flushing = true;
     var item = outbox[0];
-    api('add', { id: item.id, title: item.title, priority: item.priority, assignees: item.assignees })
-      .then(function (d) {
-        var real = d && d.task;
-        var idx = indexById(item.id);
-        if (idx >= 0) { if (real) state.tasks[idx] = real; else state.tasks[idx].pending = false; }
-        else if (real) { state.tasks.unshift(real); }
-        saveOutbox(loadOutbox().filter(function (x) { return x.id !== item.id; }));
-        flushing = false;
-        render();
-        if (loadOutbox().length) flushOutbox();   // 続けて次を送信
-      })
-      .catch(function (e) {
-        flushing = false;
-        scheduleFlush();                          // 送れなかった。後でまた試す
-      });
+    var type = item.type || 'task';
+    var action, payload;
+    if (type === 'memo') {
+      action = 'addMemo'; payload = { id: item.id, text: item.text };
+    } else if (type === 'archive') {
+      action = 'addArchive';
+      payload = { id: item.id, text: item.text, priority: item.priority, assignees: item.assignees, createdAt: item.createdAt, repeat: item.repeat };
+    } else {
+      action = 'add'; payload = { id: item.id, title: item.title, priority: item.priority, assignees: item.assignees };
+    }
+    api(action, payload).then(function (d) {
+      applyFlushSuccess(type, item, d);
+      outboxRemove(item.id);
+      flushing = false;
+      render();
+      if (loadOutbox().length) flushOutbox();     // 続けて次を送信
+    }).catch(function (e) {
+      flushing = false;
+      scheduleFlush();                            // 送れなかった。後でまた試す
+    });
+  }
+  // 送信成功時、該当アイテムの pending を解除（サーバーの値で置換）
+  function applyFlushSuccess(type, item, d) {
+    if (type === 'memo') {
+      var i = findIdx(state.memos, item.id), real = d && d.memo;
+      if (i >= 0) { if (real) state.memos[i] = real; else state.memos[i].pending = false; }
+      else if (real) state.memos.unshift(real);
+    } else if (type === 'archive') {
+      var j = findIdx(state.archive, item.id), re = d && d.entry;
+      if (j >= 0) { if (re) state.archive[j] = re; else state.archive[j].pending = false; }
+      else if (re) state.archive.unshift(re);
+      // 保管が当日等で自動タスク化された分を取り込む（既存・未送信は消さない）
+      if (d && d.tasks) {
+        var have = {}; state.tasks.forEach(function (t) { have[t.id] = true; });
+        d.tasks.forEach(function (t) { if (!have[t.id]) state.tasks.push(t); });
+      }
+    } else {
+      var k = findIdx(state.tasks, item.id), rt = d && d.task;
+      if (k >= 0) { if (rt) state.tasks[k] = rt; else state.tasks[k].pending = false; }
+      else if (rt) state.tasks.unshift(rt);
+    }
   }
 
   var completeTimers = {}; // id -> timer（確定待ちの完了）

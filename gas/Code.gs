@@ -209,9 +209,15 @@ function addArchive_(params) {
   lock.waitLock(15000);
   try {
     var sheet = getArchiveSheet_();
+    var id = params.id || generateId_();
+    // 冪等: 同じIDが既にあれば二重追加しない（オフライン再送対策）
+    var existing = findRowObj_(sheet, ARCHIVE_COLUMNS, id);
+    if (existing) {
+      return { entry: existing, archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS), tasks: readRows_(getSheet_(), COLUMNS) };
+    }
     var repeat = (params.repeat === 'monthly' || params.repeat === 'yearly') ? params.repeat : 'none';
     var entry = {
-      id: generateId_(),
+      id: id,
       text: String(params.text || '').trim(),
       priority: params.priority || DEFAULT_PRIORITY,
       assignees: String(params.assignees || ''),
@@ -223,6 +229,7 @@ function addArchive_(params) {
     sheet.appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
     runArchiveReminders_(); // 記載日が本日(月日)なら即タスク化
     return {
+      entry: entry,
       archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
       tasks: readRows_(getSheet_(), COLUMNS)
     };
@@ -290,9 +297,13 @@ function addMemo_(params) {
   lock.waitLock(15000);
   try {
     var sheet = getMemoSheet_();
+    var id = params.id || generateId_();
+    // 冪等: 同じIDが既にあれば二重追加しない（オフライン再送対策）
+    var existing = findRowObj_(sheet, MEMO_COLUMNS, id);
+    if (existing) return { memo: existing, memos: readRows_(getMemoSheet_(), MEMO_COLUMNS) };
     var now = now_();
     var memo = {
-      id: generateId_(),
+      id: id,
       text: String(params.text || '').trim(),
       createdAt: now,
       updatedAt: now
@@ -496,6 +507,24 @@ function findRow_(id) {
         task[COLUMNS[c]] = rowValues[c] != null ? String(rowValues[c]) : '';
       }
       return { sheet: sheet, rowIndex: rowIndex, task: task };
+    }
+  }
+  return null;
+}
+
+// 任意シートを id(1列目) で検索し、見つかれば列名→値のオブジェクトを返す（冪等チェック用）
+function findRowObj_(sheet, cols, id) {
+  var last = sheet.getLastRow();
+  if (last < 2 || !id) return null;
+  var vals = sheet.getRange(2, 1, last - 1, cols.length).getValues();
+  for (var r = 0; r < vals.length; r++) {
+    if (String(vals[r][0]) === String(id)) {
+      var o = {};
+      for (var c = 0; c < cols.length; c++) {
+        var v = vals[r][c];
+        o[cols[c]] = (v instanceof Date) ? Utilities.formatDate(v, TIMEZONE, 'yyyy/MM/dd HH:mm:ss') : (v != null ? String(v) : '');
+      }
+      return o;
     }
   }
   return null;
