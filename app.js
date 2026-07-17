@@ -60,6 +60,7 @@
     archive: [],
     memos: [],
     view: 'open',                 // 'open' | 'done' | 'settings' | 'archive' | 'memo'
+    expanded: {},                 // 展開中の項目ID（再描画をまたいで開いたままにする）
     ready: false,                 // 初回読み込みが終わったか（読み込み中は入力UIを隠す）
     composerOpen: false,          // 入力ドックを開いているか（false=丸ボタンのみ）
     composerPriority: DEFAULT_PRIORITY,
@@ -329,6 +330,16 @@
     if (rows.length) appendGroup(rows);
   }
 
+  // 展開の開閉を state.expanded に記録し、再描画をまたいで開いたままにする
+  function bindExpand(el, main, id) {
+    if (state.expanded[id]) el.classList.add('expanded');
+    main.addEventListener('click', function () {
+      var on = el.classList.toggle('expanded');
+      if (on) state.expanded[id] = true; else delete state.expanded[id];
+      updateComposerVisibility();
+    });
+  }
+
   function taskEl(t) {
     var assignees = parseAssignees(t.assignees);
     var meta = prioMeta(t.priority);
@@ -374,7 +385,7 @@
       main.appendChild(ia);
     }
     main.appendChild(doneBtn);
-    main.addEventListener('click', function () { el.classList.toggle('expanded'); updateComposerVisibility(); });
+    bindExpand(el, main, t.id);
     el.appendChild(main);
 
     if (t.lineMemo || (t.status === 'done' && t.doneAt) || t.pending) {
@@ -448,6 +459,7 @@
       var newAssignees = selected.join(' ');
       if (newAssignees !== (t.assignees || '')) changed.assignees = newAssignees;
       if (memo.value !== (t.lineMemo || '')) changed.lineMemo = memo.value;
+      delete state.expanded[t.id]; // 保存したらこの項目は閉じる
       if (Object.keys(changed).length) {
         saveField(t, changed); // 保存後は再描画でパネルが閉じる
       } else {
@@ -548,13 +560,37 @@
   }
 
   // ================= 保管（スクロールカレンダー 1/1〜12/31・年をまたいで統合） =================
-  function mmddKey(createdAt) { return (createdAt || '').slice(5, 10); } // 'MM/dd'
-  function fmtMMDD(createdAt) { // 'yyyy/MM/dd HH:mm' -> 'M月D日'
-    var mm = mmddKey(createdAt).split('/');
-    return (+mm[0]) + '月' + (+mm[1]) + '日';
+  // 日付文字列を {y,m,d} に解釈（yyyy/MM/dd 表記も英語表記(Sat Jul 18 2026)も対応）
+  function parseYMD(createdAt) {
+    var s = String(createdAt || '');
+    var m = s.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+    if (m) return { y: +m[1], m: +m[2], d: +m[3] };
+    var dt = new Date(s);
+    if (!isNaN(dt.getTime())) return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+    return null;
+  }
+  var p2_ = function (n) { return ('0' + n).slice(-2); };
+  function mmddKey(createdAt) { // 'MM/dd'（不明は末尾に来るよう '99/99'）
+    var v = parseYMD(createdAt);
+    return v ? (p2_(v.m) + '/' + p2_(v.d)) : '99/99';
+  }
+  function fmtMMDD(createdAt) { // -> 'M月D日'
+    var v = parseYMD(createdAt);
+    return v ? (v.m + '月' + v.d + '日') : '日付不明';
   }
   function toDateInputValue(createdAt) { // -> 'yyyy-MM-dd'
-    return (createdAt || '').slice(0, 10).replace(/\//g, '-');
+    var v = parseYMD(createdAt);
+    return v ? (v.y + '-' + p2_(v.m) + '-' + p2_(v.d)) : '';
+  }
+  // 日時を 'yyyy/MM/dd HH:mm:ss' に正規化（英語表記等が入っても揃える）
+  function normDateTime(s) {
+    var v = parseYMD(s);
+    var str = String(s || '');
+    var t = str.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (v) return v.y + '/' + p2_(v.m) + '/' + p2_(v.d) + ' ' + (t ? (p2_(+t[1]) + ':' + t[2] + ':' + p2_(t[3] || 0)) : '00:00:00');
+    var d = new Date(str);
+    if (!isNaN(d.getTime())) return d.getFullYear() + '/' + p2_(d.getMonth() + 1) + '/' + p2_(d.getDate()) + ' ' + p2_(d.getHours()) + ':' + p2_(d.getMinutes()) + ':' + p2_(d.getSeconds());
+    return nowLocal();
   }
 
   function renderArchive() {
@@ -636,8 +672,8 @@
     dateInput.addEventListener('click', function (ev) { ev.stopPropagation(); });
     dateInput.addEventListener('change', function () {
       if (!dateInput.value) return;
-      var time = (e.createdAt || '').slice(11, 16) || '00:00';
-      saveArchiveFields(e, { createdAt: dateInput.value.replace(/-/g, '/') + ' ' + time });
+      var time = normDateTime(e.createdAt).slice(11, 16) || '00:00';
+      saveArchiveFields(e, { createdAt: normDateTime(dateInput.value.replace(/-/g, '/') + ' ' + time) });
     });
 
     var del = document.createElement('button');
@@ -654,7 +690,7 @@
     main.appendChild(text);
     main.appendChild(dateInput);
     main.appendChild(del);
-    main.addEventListener('click', function () { el.classList.toggle('expanded'); });
+    bindExpand(el, main, e.id);
     el.appendChild(main);
 
     if (assignees.length) {
@@ -736,6 +772,7 @@
       var na = selected.join(' ');
       if (na !== (e.assignees || '')) changed.assignees = na;
       if (curRepeat !== normalizeRepeat(e.repeat)) changed.repeat = curRepeat;
+      delete state.expanded[e.id]; // 保存したらこの項目は閉じる
       if (Object.keys(changed).length) saveArchiveFields(e, changed);
       else { var host = wrap.closest ? wrap.closest('.task') : null; if (host) host.classList.remove('expanded'); }
       toast('保存しました');
@@ -773,7 +810,7 @@
   function addArchive(text, createdAt, repeat) {
     var item = {
       id: clientId(), type: 'archive', text: text, priority: state.composerPriority,
-      assignees: state.composerAssignees.join(' '), createdAt: createdAt || nowLocal(),
+      assignees: state.composerAssignees.join(' '), createdAt: normDateTime(createdAt || nowLocal()),
       repeat: normalizeRepeat(repeat)
     };
     outboxAdd(item);                // まず端末に保存（通信が悪くても消えない）
@@ -868,7 +905,7 @@
 
     main.appendChild(body);
     main.appendChild(del);
-    main.addEventListener('click', function () { el.classList.toggle('expanded'); });
+    bindExpand(el, main, m.id);
     el.appendChild(main);
 
     var when = document.createElement('div');
@@ -897,6 +934,7 @@
     saveBtn.textContent = '保存';
     saveBtn.addEventListener('click', function () {
       var nt = ta.value.trim();
+      delete state.expanded[m.id]; // 保存したらこの項目は閉じる
       if (nt && nt !== (m.text || '')) updateMemo(m, nt);
       else { el.classList.remove('expanded'); }
       toast('保存しました');
