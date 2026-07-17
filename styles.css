@@ -427,19 +427,19 @@ html, body {
 }
 .fab:active { transform: scale(0.92); }
 
-/* 入力を閉じる丸ボタン（ドックの上・右） */
+/* 入力を閉じるボタン（ドックの上・右） */
 .close-fab {
   position: absolute;
   right: 16px;
-  top: -66px;
-  width: 54px; height: 54px;
-  font-size: 32px;
-  font-weight: 300;
+  top: -52px;
+  padding: 9px 20px;
+  font-size: 15px;
+  font-weight: 600;
   line-height: 1;
   color: #fff;
   background: var(--accent);
   border: none;
-  border-radius: 50%;
+  border-radius: 20px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   display: flex;
@@ -515,7 +515,7 @@ html, body {
   font-weight: 400;
   line-height: 1;
   color: #fff;
-  background: var(--muted);
+  background: var(--accent);
   border: none;
   border-radius: 50%;
   cursor: pointer;
