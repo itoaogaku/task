@@ -1214,15 +1214,27 @@
     $repeatBtn.textContent = REPEAT_LABELS[normalizeRepeat(state.composerRepeat)];
     $repeatBtn.classList.toggle('on', state.composerRepeat !== 'none');
   }
+  // キーボード表示中も入力ドックをキーボード直上に固定し続ける（iOSでのズレ・隙間対策）
+  function syncDock() {
+    var vv = window.visualViewport;
+    if (!vv) return;
+    // レイアウト下端から見て、キーボード等で隠れている下部の高さ
+    var overlap = window.innerHeight - vv.height - vv.offsetTop;
+    if (overlap < 1) overlap = 0;
+    $dock.style.transform = overlap ? ('translateY(' + (-overlap) + 'px)') : '';
+  }
   function openComposer() {
     state.composerOpen = true;
     updateComposerVisibility();
     $titleInput.focus();
+    syncDock();
+    setTimeout(syncDock, 300); // キーボードのアニメーション後にも再調整
   }
   function closeComposer() {
     state.composerOpen = false;
     if (document.activeElement) document.activeElement.blur();
     updateComposerVisibility();
+    $dock.style.transform = '';
   }
 
   function buildComposerTags() {
@@ -1321,6 +1333,12 @@
     });
 
     document.getElementById('reloadBtn').addEventListener('click', load);
+
+    // キーボードの開閉・スクロールに追従して入力ドックを固定し続ける
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', syncDock);
+      window.visualViewport.addEventListener('scroll', syncDock);
+    }
 
     // 通信が復帰したら未送信タスクを自動で再送
     window.addEventListener('online', flushOutbox);
