@@ -25,6 +25,16 @@
   var REPEAT_ORDER = ['none', 'monthly', 'yearly'];
   function normalizeRepeat(v) { return (v === 'monthly' || v === 'yearly') ? v : 'none'; }
 
+  // 日時文字列を比較用の数値(ミリ秒)へ。英語表記(Wed Jul 15 ...)も yyyy/MM/dd 表記も解釈
+  function parseDateMs(s) {
+    s = String(s == null ? '' : s);
+    if (!s) return 0;
+    var m = s.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)).getTime();
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+
   // 日時を日本語表記へ（例: 2026年7月15日 06:00）。英語表記(Wed Jul 15 ...)も解釈する
   function fmtDateTimeJa(s) {
     s = String(s == null ? '' : s);
@@ -270,9 +280,10 @@
       if (d !== 0) return d;                     // まず優先度順
       var ra = assigneeRank(a), rb = assigneeRank(b);
       if (ra !== rb) return ra - rb;             // 次に確認先順（確認先タブの並び）
-      return (b.createdAt || '').localeCompare(a.createdAt || '');
+      return parseDateMs(b.createdAt) - parseDateMs(a.createdAt);
     });
-    done.sort(function (a, b) { return (b.doneAt || '').localeCompare(a.doneAt || ''); });
+    // 完了は「完了した日時」の新しい順（最新が一番上）
+    done.sort(function (a, b) { return parseDateMs(b.doneAt) - parseDateMs(a.doneAt); });
 
     updateComposerVisibility();
 
@@ -818,7 +829,7 @@
 
     // 新しい順に表示
     var memos = state.memos.slice().sort(function (a, b) {
-      return (b.createdAt || '').localeCompare(a.createdAt || '');
+      return parseDateMs(b.createdAt) - parseDateMs(a.createdAt);
     });
     var group = document.createElement('div');
     group.className = 'group';
