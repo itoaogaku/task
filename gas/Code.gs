@@ -32,6 +32,18 @@ var DEFAULT_PRIORITY = 'p1';
 // 簡易アクセストークン（フロントの config.js の TOKEN と一致させる）
 var SHARED_TOKEN = 'jaoagpagauzify7aouw';
 
+// ボード（人ごとの区画）。リクエストごとに params.board から設定される。
+// '' は既定ボード（従来どおり Tasks / Archive / Memo / Assignees シートを使う）。
+// 値があるときは各シート名の末尾に __<board> が付き、データが分離される。
+var CURRENT_BOARD = '';
+function sanitizeBoard_(b) {
+  b = String(b == null ? '' : b).trim().slice(0, 40);
+  return b.replace(/[\[\]\*\/\\\?:]/g, ''); // シート名に使えない文字を除去
+}
+function sheetName_(base) {
+  return CURRENT_BOARD ? base + '__' + CURRENT_BOARD : base;
+}
+
 // 列定義（この順序でシートに保存される）
 var COLUMNS = ['id', 'title', 'priority', 'status', 'assignees', 'lineMemo', 'createdAt', 'doneAt', 'updatedAt'];
 var ARCHIVE_COLUMNS = ['id', 'text', 'priority', 'assignees', 'createdAt', 'repeat', 'lastFired'];
@@ -61,6 +73,9 @@ function handle_(e, params) {
     if (String(params.token || '') !== String(SHARED_TOKEN)) {
       return json_({ ok: false, error: 'unauthorized' });
     }
+
+    // このリクエストのボード（人ごとの区画）を確定
+    CURRENT_BOARD = sanitizeBoard_(params.board);
 
     var action = params.action || 'list';
     var result;
@@ -403,7 +418,22 @@ function runRecurring() {
   var lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
-    runArchiveReminders_();
+    // 全ボードの保管シート（Archive / Archive__<board>）を巡回して処理する
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheets = ss.getSheets();
+    var prefix = ARCHIVE_SHEET + '__';
+    var saved = CURRENT_BOARD;
+    for (var i = 0; i < sheets.length; i++) {
+      var name = sheets[i].getName();
+      if (name === ARCHIVE_SHEET) {
+        CURRENT_BOARD = '';
+        runArchiveReminders_();
+      } else if (name.indexOf(prefix) === 0) {
+        CURRENT_BOARD = name.slice(prefix.length);
+        runArchiveReminders_();
+      }
+    }
+    CURRENT_BOARD = saved;
   } finally {
     lock.releaseLock();
   }
@@ -497,19 +527,19 @@ function dedupeTasks() {
 
 // ===== ヘルパー =====
 function getSheet_() {
-  return ensureSheet_(SHEET_NAME, COLUMNS);
+  return ensureSheet_(sheetName_(SHEET_NAME), COLUMNS);
 }
 
 function getArchiveSheet_() {
-  return ensureSheet_(ARCHIVE_SHEET, ARCHIVE_COLUMNS);
+  return ensureSheet_(sheetName_(ARCHIVE_SHEET), ARCHIVE_COLUMNS);
 }
 
 function getMemoSheet_() {
-  return ensureSheet_(MEMO_SHEET, MEMO_COLUMNS);
+  return ensureSheet_(sheetName_(MEMO_SHEET), MEMO_COLUMNS);
 }
 
 function getAssigneeSheet_() {
-  return ensureSheet_(ASSIGNEE_SHEET, ASSIGNEE_COLUMNS);
+  return ensureSheet_(sheetName_(ASSIGNEE_SHEET), ASSIGNEE_COLUMNS);
 }
 
 function ensureSheet_(name, cols) {

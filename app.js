@@ -3,6 +3,25 @@
   'use strict';
 
   var CFG = window.APP_CONFIG || {};
+
+  // ================= ボード（人ごとの区画） =================
+  // URLの ?board=名前 で区画を分ける。各ボードは専用のタスク/保管/メモ/確認先を持つ。
+  // 一度開けば端末に記憶され、次回以降は ?board= なしのURLでも同じボードを表示する。
+  var BOARD_STORE = 'task_board_v1';
+  function resolveBoard() {
+    var b = '';
+    try {
+      var q = new URLSearchParams(location.search).get('board');
+      if (q != null) b = q;                                   // URL指定を最優先
+      else b = localStorage.getItem(BOARD_STORE) || '';       // 無ければ前回のボード
+    } catch (e) { /* noop */ }
+    b = String(b).trim().slice(0, 40);
+    try { localStorage.setItem(BOARD_STORE, b); } catch (e) { /* noop */ }
+    return b;
+  }
+  var BOARD = resolveBoard();
+  // localStorageキーをボードごとに分ける（'' は既定ボードで従来キーのまま）
+  function nsKey(base) { return BOARD ? base + '__' + BOARD : base; }
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
@@ -16,9 +35,9 @@
   var DEFAULT_PRIORITY = CFG.DEFAULT_PRIORITY || (PRIORITIES[0] && PRIORITIES[0].key) || 's';
   // 旧優先度キー → 新キーの読み替え（過去データ対応）
   var LEGACY_PRIORITY = { high: 's', mid: 'p2', low: 'ie', p3: 'ie' };
-  var ASSIGNEE_STORE = 'assignee_options_v1';
-  var OUTBOX_STORE = 'task_outbox_v1';   // 未送信タスク（通信失敗時も端末に保持）
-  var CACHE_STORE = 'task_cache_v1';     // 前回の一覧データ（起動時に即表示するため）
+  var ASSIGNEE_STORE = nsKey('assignee_options_v1');
+  var OUTBOX_STORE = nsKey('task_outbox_v1');   // 未送信タスク（通信失敗時も端末に保持）
+  var CACHE_STORE = nsKey('task_cache_v1');     // 前回の一覧データ（起動時に即表示するため）
 
   // 保管の繰り返し設定（none=登録のみ / monthly=毎月 / yearly=毎年）
   var REPEAT_LABELS = { none: '登録', monthly: '毎月', yearly: '毎年' };
@@ -109,9 +128,11 @@
     payload = payload || {};
     payload.action = action;
     payload.token = CFG.TOKEN;
+    payload.board = BOARD;
 
     if (action === 'list') {
-      var url = CFG.API_URL + '?action=list&token=' + encodeURIComponent(CFG.TOKEN);
+      var url = CFG.API_URL + '?action=list&token=' + encodeURIComponent(CFG.TOKEN) +
+        '&board=' + encodeURIComponent(BOARD);
       return fetch(url, { method: 'GET' }).then(parseRes);
     }
     return fetch(CFG.API_URL, {
