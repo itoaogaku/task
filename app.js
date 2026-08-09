@@ -105,6 +105,21 @@
   }
 
   // ================= API =================
+  // 電波が弱いと fetch が延々と終わらないことがある。一定時間で打ち切って
+  // 「失敗」として扱い、未送信キューの再送に回す（内容は端末に残っているので消えない）。
+  var API_TIMEOUT = 20000; // ms
+  function fetchWithTimeout(url, opts) {
+    if (typeof AbortController === 'undefined') return fetch(url, opts); // 古い端末は従来動作
+    var ctrl = new AbortController();
+    opts = opts || {};
+    opts.signal = ctrl.signal;
+    var timer = setTimeout(function () { ctrl.abort(); }, API_TIMEOUT);
+    return fetch(url, opts).then(
+      function (res) { clearTimeout(timer); return res; },
+      function (err) { clearTimeout(timer); throw new Error('通信タイムアウト'); }
+    );
+  }
+
   function api(action, payload) {
     payload = payload || {};
     payload.action = action;
@@ -112,9 +127,9 @@
 
     if (action === 'list') {
       var url = CFG.API_URL + '?action=list&token=' + encodeURIComponent(CFG.TOKEN);
-      return fetch(url, { method: 'GET' }).then(parseRes);
+      return fetchWithTimeout(url, { method: 'GET' }).then(parseRes);
     }
-    return fetch(CFG.API_URL, {
+    return fetchWithTimeout(CFG.API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
