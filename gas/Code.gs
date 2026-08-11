@@ -91,14 +91,22 @@ function handle_(e, params) {
 function listAll_() {
   // アプリを開くたびに、期日を過ぎた保管の繰り返しを取りこぼさずタスク化する。
   // これにより「毎日1回のトリガー」が未設定でも自動タスク化が機能する。
-  // 同時アクセスの二重発火を避けるため tryLock。取れなければ今回はスキップ（次回や
-  // 毎日のトリガーで処理される）。リマインダーの失敗は一覧取得を止めない。
+  // 安全弁：1日1回だけ実行する（同日中の再読み込みでは走らせない）。万一判定に
+  // 不具合があってもリロードのたびに増殖しないようにするため。日付は端末ではなく
+  // サーバー(ScriptProperties)に記録する。同時アクセスの二重実行は tryLock で防ぐ。
   try {
-    var lock = LockService.getScriptLock();
-    if (lock.tryLock(3000)) {
-      try { runArchiveReminders_(); } finally { lock.releaseLock(); }
+    var props = PropertiesService.getScriptProperties();
+    var chkKey = 'lastReminderCheck';
+    if (props.getProperty(chkKey) !== todayJst_()) {
+      var lock = LockService.getScriptLock();
+      if (lock.tryLock(3000)) {
+        try {
+          runArchiveReminders_();
+          props.setProperty(chkKey, todayJst_());
+        } finally { lock.releaseLock(); }
+      }
     }
-  } catch (e) { /* noop */ }
+  } catch (e) { /* リマインダー失敗は一覧取得を止めない */ }
   return {
     tasks: readRows_(getSheet_(), COLUMNS),
     archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
@@ -436,8 +444,6 @@ function runArchiveReminders_() {
   var todayStr = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd'); // 例 2026/08/11
   var tp = todayStr.split('/');
   var tY = +tp[0], tM = +tp[1], tD = +tp[2];
-  var thisMonthKey = todayStr.slice(0, 7); // 2026/08
-  var thisYearKey = todayStr.slice(0, 4);  // 2026
   var daysInMonth = new Date(tY, tM, 0).getDate(); // 当月の日数
 
   var values = sheet.getRange(2, 1, last - 1, ARCHIVE_COLUMNS.length).getValues();
@@ -452,16 +458,18 @@ function runArchiveReminders_() {
     if (repeat !== 'monthly' && repeat !== 'yearly') continue; // 保管のみ
     var g = ymd_(row[idx.createdAt]);
     if (!g) continue;
-    var lastFired = String(row[idx.lastFired] || '');
+    // lastFired はセルが日付型に自動変換されることがあるため ymd_ で堅牢に読む
+    // （文字列の slice で年月を見ると英語日付表記で誤判定し、毎回再発火してしまう）
+    var lf = ymd_(row[idx.lastFired]);
 
     var due, alreadyFired;
     if (repeat === 'monthly') {
       var targetD = Math.min(g.d, daysInMonth);
-      due = tD >= targetD;                              // 今月の対象日を過ぎた（当日含む）
-      alreadyFired = lastFired.slice(0, 7) === thisMonthKey; // 今月すでに発火済み
+      due = tD >= targetD;                                   // 今月の対象日を過ぎた（当日含む）
+      alreadyFired = !!lf && lf.y === tY && lf.m === tM;     // 今月すでに発火済み
     } else { // yearly
-      due = (tM * 100 + tD) >= (g.m * 100 + g.d);       // 今年の対象月日を過ぎた（当日含む）
-      alreadyFired = lastFired.slice(0, 4) === thisYearKey;  // 今年すでに発火済み
+      due = (tM * 100 + tD) >= (g.m * 100 + g.d);            // 今年の対象月日を過ぎた（当日含む）
+      alreadyFired = !!lf && lf.y === tY;                    // 今年すでに発火済み
     }
     if (!due || alreadyFired) continue;
 
@@ -599,6 +607,10 @@ function writeRow_(sheet, rowIndex, task) {
 
 function now_() {
   return Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd HH:mm:ss');
+}
+
+function todayJst_() {
+  return Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd');
 }
 
 // 保管の記載日(セル値は文字列 or シートが日付型に変換した Date のどちらもあり得る)から
