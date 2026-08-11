@@ -443,6 +443,7 @@ function runArchiveReminders_() {
   var values = sheet.getRange(2, 1, last - 1, ARCHIVE_COLUMNS.length).getValues();
   var idx = {};
   ARCHIVE_COLUMNS.forEach(function (c, i) { idx[c] = i; });
+  var fired = false;
 
   for (var r = 0; r < values.length; r++) {
     var row = values[r];
@@ -474,7 +475,12 @@ function runArchiveReminders_() {
     if (!task.title) continue;
     getSheet_().appendRow(COLUMNS.map(function (c) { return task[c]; }));
     sheet.getRange(r + 2, idx.lastFired + 1).setValue(todayStr); // 今期は発火済みに
+    fired = true;
   }
+  // 発火済みの印(lastFired)を確定させてから戻る。呼び出し側がロックを離す前に
+  // 書き込みを永続化しておくことで、ほぼ同時の別実行が古い状態を読んで
+  // 二重にタスク化するのを防ぐ。
+  if (fired) SpreadsheetApp.flush();
 }
 
 // 毎日1回のトリガーを設定（GASエディタから1回だけ手動実行する）
