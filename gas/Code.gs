@@ -89,6 +89,16 @@ function handle_(e, params) {
 
 // ===== 各アクション =====
 function listAll_() {
+  // アプリを開くたびに、期日を過ぎた保管の繰り返しを取りこぼさずタスク化する。
+  // これにより「毎日1回のトリガー」が未設定でも自動タスク化が機能する。
+  // 同時アクセスの二重発火を避けるため tryLock。取れなければ今回はスキップ（次回や
+  // 毎日のトリガーで処理される）。リマインダーの失敗は一覧取得を止めない。
+  try {
+    var lock = LockService.getScriptLock();
+    if (lock.tryLock(3000)) {
+      try { runArchiveReminders_(); } finally { lock.releaseLock(); }
+    }
+  } catch (e) { /* noop */ }
   return {
     tasks: readRows_(getSheet_(), COLUMNS),
     archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
@@ -409,17 +419,27 @@ function runRecurring() {
   }
 }
 
-// 保管の各記録を繰り返し設定に応じてタスク化する（保管データは消さない・同日に二重発火しない）
+// 保管の各記録を繰り返し設定に応じてタスク化する（保管データは消さない）
 //   repeat = 'yearly'  … 毎年その月日にタスク化
 //   repeat = 'monthly' … 毎月その日にタスク化
 //   repeat = 'none'    … タスク化しない（保管のみ）
+// ポイント：
+//  - 「その日ちょうど」だけでなく、期日を過ぎていれば当該期間内で一度だけ拾う（取りこぼし防止）。
+//    例）毎月10日の保管は、11日にチェックしても今月まだ未発火なら追加する。
+//  - lastFired（最後にタスク化した日）で期間内の二重発火を防ぐ
+//    （毎月＝同一年月／毎年＝同一年で判定）。
+//  - 月末補正：対象日が当月に無い場合は月末に丸める（31日設定→30日しかない月は30日）。
 function runArchiveReminders_() {
   var sheet = getArchiveSheet_();
   var last = sheet.getLastRow();
   if (last < 2) return;
-  var today = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd');
-  var todayMMDD = today.slice(5);   // MM/dd
-  var todayDD = today.slice(8);     // dd
+  var todayStr = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd'); // 例 2026/08/11
+  var tp = todayStr.split('/');
+  var tY = +tp[0], tM = +tp[1], tD = +tp[2];
+  var thisMonthKey = todayStr.slice(0, 7); // 2026/08
+  var thisYearKey = todayStr.slice(0, 4);  // 2026
+  var daysInMonth = new Date(tY, tM, 0).getDate(); // 当月の日数
+
   var values = sheet.getRange(2, 1, last - 1, ARCHIVE_COLUMNS.length).getValues();
   var idx = {};
   ARCHIVE_COLUMNS.forEach(function (c, i) { idx[c] = i; });
@@ -429,13 +449,20 @@ function runArchiveReminders_() {
     if (!row[idx.id]) continue;
     var repeat = String(row[idx.repeat] || 'none');
     if (repeat !== 'monthly' && repeat !== 'yearly') continue; // 保管のみ
-    var created = String(row[idx.createdAt] || '');
-    if (repeat === 'yearly') {
-      if (created.slice(5, 10) !== todayMMDD) continue;  // 月日が今日でない
-    } else { // monthly
-      if (created.slice(8, 10) !== todayDD) continue;    // 日が今日でない
+    var g = ymd_(row[idx.createdAt]);
+    if (!g) continue;
+    var lastFired = String(row[idx.lastFired] || '');
+
+    var due, alreadyFired;
+    if (repeat === 'monthly') {
+      var targetD = Math.min(g.d, daysInMonth);
+      due = tD >= targetD;                              // 今月の対象日を過ぎた（当日含む）
+      alreadyFired = lastFired.slice(0, 7) === thisMonthKey; // 今月すでに発火済み
+    } else { // yearly
+      due = (tM * 100 + tD) >= (g.m * 100 + g.d);       // 今年の対象月日を過ぎた（当日含む）
+      alreadyFired = lastFired.slice(0, 4) === thisYearKey;  // 今年すでに発火済み
     }
-    if (String(row[idx.lastFired] || '') === today) continue; // 本日は発火済み
+    if (!due || alreadyFired) continue;
 
     var now = now_();
     var task = {
@@ -446,7 +473,7 @@ function runArchiveReminders_() {
     };
     if (!task.title) continue;
     getSheet_().appendRow(COLUMNS.map(function (c) { return task[c]; }));
-    sheet.getRange(r + 2, idx.lastFired + 1).setValue(today); // 本日発火済みに
+    sheet.getRange(r + 2, idx.lastFired + 1).setValue(todayStr); // 今期は発火済みに
   }
 }
 
@@ -566,6 +593,20 @@ function writeRow_(sheet, rowIndex, task) {
 
 function now_() {
   return Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd HH:mm:ss');
+}
+
+// 保管の記載日(セル値は文字列 or シートが日付型に変換した Date のどちらもあり得る)から
+// 年月日を取り出す。取り出せなければ null。
+function ymd_(raw) {
+  if (raw instanceof Date) {
+    return { y: raw.getFullYear(), m: raw.getMonth() + 1, d: raw.getDate() };
+  }
+  var s = String(raw == null ? '' : raw);
+  var m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m) return { y: +m[1], m: +m[2], d: +m[3] };
+  var dt = new Date(s);
+  if (!isNaN(dt.getTime())) return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+  return null;
 }
 
 function generateId_() {
