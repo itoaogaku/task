@@ -119,21 +119,32 @@ function readRows_(sheet, cols) {
   var values = sheet.getDataRange().getValues();
   var rows = [];
   for (var r = 1; r < values.length; r++) {
-    var row = values[r];
-    if (!row[0]) continue; // id が無い行はスキップ
-    var obj = {};
-    for (var c = 0; c < cols.length; c++) {
-      var v = row[c];
-      if (v instanceof Date) {
-        // シートが日付型に自動変換したセルは yyyy/MM/dd HH:mm:ss 文字列へ整形
-        obj[cols[c]] = Utilities.formatDate(v, TIMEZONE, 'yyyy/MM/dd HH:mm:ss');
-      } else {
-        obj[cols[c]] = v != null ? String(v) : '';
-      }
-    }
-    rows.push(obj);
+    if (!values[r][0]) continue; // id が無い行はスキップ
+    rows.push(rowToObj_(values[r], cols));
   }
   return rows;
+}
+
+// 1行分の値 → 列名→文字列のオブジェクト
+function rowToObj_(row, cols) {
+  var obj = {};
+  for (var c = 0; c < cols.length; c++) {
+    var v = row[c];
+    // シートが日付型に自動変換したセルは yyyy/MM/dd HH:mm:ss 文字列へ整形
+    obj[cols[c]] = (v instanceof Date) ? Utilities.formatDate(v, TIMEZONE, 'yyyy/MM/dd HH:mm:ss')
+                                        : (v != null ? String(v) : '');
+  }
+  return obj;
+}
+
+// id(1列目)で行を探す。シートを1回で読み込み、見つかれば { rowIndex(1始まり), obj } を返す
+function findById_(sheet, cols, id) {
+  if (!id) return null;
+  var values = sheet.getDataRange().getValues();
+  for (var r = 1; r < values.length; r++) {
+    if (String(values[r][0]) === String(id)) return { rowIndex: r + 1, obj: rowToObj_(values[r], cols) };
+  }
+  return null;
 }
 
 function addTask_(params) {
@@ -229,10 +240,8 @@ function addArchive_(params) {
     var sheet = getArchiveSheet_();
     var id = params.id || generateId_();
     // 冪等: 同じIDが既にあれば二重追加しない（オフライン再送対策）
-    var existing = findRowObj_(sheet, ARCHIVE_COLUMNS, id);
-    if (existing) {
-      return { entry: existing, archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS), tasks: readRows_(getSheet_(), COLUMNS) };
-    }
+    var existing = findById_(sheet, ARCHIVE_COLUMNS, id);
+    if (existing) return { entry: existing.obj, newTasks: [] };
     var repeat = (params.repeat === 'monthly' || params.repeat === 'yearly') ? params.repeat : 'none';
     var entry = {
       id: id,
@@ -245,12 +254,9 @@ function addArchive_(params) {
     };
     if (!entry.text) throw new Error('text is required');
     sheet.appendRow(ARCHIVE_COLUMNS.map(function (c) { return entry[c]; }));
-    runArchiveReminders_(); // 記載日が本日(月日)なら即タスク化
-    return {
-      entry: entry,
-      archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
-      tasks: readRows_(getSheet_(), COLUMNS)
-    };
+    // 記載日が本日(月日)なら即タスク化。新しくできたタスクだけ返す（一覧全体は返さない＝速い）。
+    // ※ 旧版アプリは `tasks` を受け取ると一覧を丸ごと置き換えるため、別名 newTasks で返す
+    return { entry: entry, newTasks: runArchiveReminders_() };
   } finally {
     lock.releaseLock();
   }
@@ -261,34 +267,20 @@ function updateArchive_(params) {
   lock.waitLock(15000);
   try {
     var sheet = getArchiveSheet_();
-    var last = sheet.getLastRow();
-    var ids = sheet.getRange(1, 1, last, 1).getValues();
-    for (var r = 1; r < ids.length; r++) {
-      if (String(ids[r][0]) === String(params.id)) {
-        var rowIndex = r + 1;
-        var vals = sheet.getRange(rowIndex, 1, 1, ARCHIVE_COLUMNS.length).getValues()[0];
-        var entry = {};
-        for (var c = 0; c < ARCHIVE_COLUMNS.length; c++) {
-          entry[ARCHIVE_COLUMNS[c]] = vals[c] != null ? String(vals[c]) : '';
-        }
-        ['text', 'priority', 'assignees', 'createdAt'].forEach(function (k) {
-          if (params[k] !== undefined) entry[k] = String(params[k]);
-        });
-        if (params.repeat !== undefined) {
-          entry.repeat = (params.repeat === 'monthly' || params.repeat === 'yearly') ? params.repeat : 'none';
-        }
-        // 日付や繰り返し設定を変えたら、発火状態をリセット
-        if (params.createdAt !== undefined || params.repeat !== undefined) entry.lastFired = '';
-        sheet.getRange(rowIndex, 1, 1, ARCHIVE_COLUMNS.length)
-             .setValues([ARCHIVE_COLUMNS.map(function (col) { return entry[col]; })]);
-        runArchiveReminders_();
-        return {
-          archive: readRows_(getArchiveSheet_(), ARCHIVE_COLUMNS),
-          tasks: readRows_(getSheet_(), COLUMNS)
-        };
-      }
+    var hit = findById_(sheet, ARCHIVE_COLUMNS, params.id);
+    if (!hit) throw new Error('archive not found: ' + params.id);
+    var entry = hit.obj;
+    ['text', 'priority', 'assignees', 'createdAt'].forEach(function (k) {
+      if (params[k] !== undefined) entry[k] = String(params[k]);
+    });
+    if (params.repeat !== undefined) {
+      entry.repeat = (params.repeat === 'monthly' || params.repeat === 'yearly') ? params.repeat : 'none';
     }
-    throw new Error('archive not found: ' + params.id);
+    // 日付や繰り返し設定を変えたら、発火状態をリセット
+    if (params.createdAt !== undefined || params.repeat !== undefined) entry.lastFired = '';
+    sheet.getRange(hit.rowIndex, 1, 1, ARCHIVE_COLUMNS.length)
+         .setValues([ARCHIVE_COLUMNS.map(function (col) { return entry[col]; })]);
+    return { entry: entry, newTasks: runArchiveReminders_() };
   } finally {
     lock.releaseLock();
   }
@@ -299,11 +291,10 @@ function deleteArchive_(id) {
   lock.waitLock(15000);
   try {
     var sheet = getArchiveSheet_();
-    var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
-    for (var r = 1; r < ids.length; r++) {
-      if (String(ids[r][0]) === String(id)) { sheet.deleteRow(r + 1); return { id: id }; }
-    }
-    throw new Error('archive not found: ' + id);
+    var hit = findById_(sheet, ARCHIVE_COLUMNS, id);
+    if (!hit) throw new Error('archive not found: ' + id);
+    sheet.deleteRow(hit.rowIndex);
+    return { id: id };
   } finally {
     lock.releaseLock();
   }
@@ -317,8 +308,8 @@ function addMemo_(params) {
     var sheet = getMemoSheet_();
     var id = params.id || generateId_();
     // 冪等: 同じIDが既にあれば二重追加しない（オフライン再送対策）
-    var existing = findRowObj_(sheet, MEMO_COLUMNS, id);
-    if (existing) return { memo: existing, memos: readRows_(getMemoSheet_(), MEMO_COLUMNS) };
+    var existing = findById_(sheet, MEMO_COLUMNS, id);
+    if (existing) return { memo: existing.obj };
     var now = now_();
     var memo = {
       id: id,
@@ -328,7 +319,7 @@ function addMemo_(params) {
     };
     if (!memo.text) throw new Error('text is required');
     sheet.appendRow(MEMO_COLUMNS.map(function (c) { return memo[c]; }));
-    return { memo: memo, memos: readRows_(getMemoSheet_(), MEMO_COLUMNS) };
+    return { memo: memo };
   } finally {
     lock.releaseLock();
   }
@@ -339,20 +330,14 @@ function updateMemo_(params) {
   lock.waitLock(15000);
   try {
     var sheet = getMemoSheet_();
-    var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
-    for (var r = 1; r < ids.length; r++) {
-      if (String(ids[r][0]) !== String(params.id)) continue;
-      var rowIndex = r + 1;
-      var vals = sheet.getRange(rowIndex, 1, 1, MEMO_COLUMNS.length).getValues()[0];
-      var memo = {};
-      for (var c = 0; c < MEMO_COLUMNS.length; c++) memo[MEMO_COLUMNS[c]] = vals[c] != null ? String(vals[c]) : '';
-      if (params.text !== undefined) memo.text = String(params.text);
-      memo.updatedAt = now_();
-      sheet.getRange(rowIndex, 1, 1, MEMO_COLUMNS.length)
-           .setValues([MEMO_COLUMNS.map(function (col) { return memo[col]; })]);
-      return { memo: memo, memos: readRows_(getMemoSheet_(), MEMO_COLUMNS) };
-    }
-    throw new Error('memo not found: ' + params.id);
+    var hit = findById_(sheet, MEMO_COLUMNS, params.id);
+    if (!hit) throw new Error('memo not found: ' + params.id);
+    var memo = hit.obj;
+    if (params.text !== undefined) memo.text = String(params.text);
+    memo.updatedAt = now_();
+    sheet.getRange(hit.rowIndex, 1, 1, MEMO_COLUMNS.length)
+         .setValues([MEMO_COLUMNS.map(function (col) { return memo[col]; })]);
+    return { memo: memo };
   } finally {
     lock.releaseLock();
   }
@@ -363,11 +348,10 @@ function deleteMemo_(id) {
   lock.waitLock(15000);
   try {
     var sheet = getMemoSheet_();
-    var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
-    for (var r = 1; r < ids.length; r++) {
-      if (String(ids[r][0]) === String(id)) { sheet.deleteRow(r + 1); return { id: id }; }
-    }
-    throw new Error('memo not found: ' + id);
+    var hit = findById_(sheet, MEMO_COLUMNS, id);
+    if (!hit) throw new Error('memo not found: ' + id);
+    sheet.deleteRow(hit.rowIndex);
+    return { id: id };
   } finally {
     lock.releaseLock();
   }
@@ -437,10 +421,12 @@ function runRecurring() {
 //  - lastFired（最後にタスク化した日）で期間内の二重発火を防ぐ
 //    （毎月＝同一年月／毎年＝同一年で判定）。
 //  - 月末補正：対象日が当月に無い場合は月末に丸める（31日設定→30日しかない月は30日）。
+// 戻り値：新しくタスク化したタスクの配列
 function runArchiveReminders_() {
+  var newTasks = [];
   var sheet = getArchiveSheet_();
   var last = sheet.getLastRow();
-  if (last < 2) return;
+  if (last < 2) return newTasks;
   var todayStr = Utilities.formatDate(new Date(), TIMEZONE, 'yyyy/MM/dd'); // 例 2026/08/11
   var tp = todayStr.split('/');
   var tY = +tp[0], tM = +tp[1], tD = +tp[2];
@@ -484,11 +470,13 @@ function runArchiveReminders_() {
     getSheet_().appendRow(COLUMNS.map(function (c) { return task[c]; }));
     sheet.getRange(r + 2, idx.lastFired + 1).setValue(todayStr); // 今期は発火済みに
     fired = true;
+    newTasks.push(task);
   }
   // 発火済みの印(lastFired)を確定させてから戻る。呼び出し側がロックを離す前に
   // 書き込みを永続化しておくことで、ほぼ同時の別実行が古い状態を読んで
   // 二重にタスク化するのを防ぐ。
   if (fired) SpreadsheetApp.flush();
+  return newTasks;
 }
 
 // 毎日1回のトリガーを設定（GASエディタから1回だけ手動実行する）
@@ -553,51 +541,26 @@ function getAssigneeSheet_() {
   return ensureSheet_(ASSIGNEE_SHEET, ASSIGNEE_COLUMNS);
 }
 
+// 1回のリクエストの中ではスプレッドシート・シートの取得を使い回す
+// （スプレッドシートへの問い合わせ回数を減らすと応答が速くなる）
+var ss_ = null, sheetCache_ = {};
 function ensureSheet_(name, cols) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(name);
-  if (!sheet) sheet = ss.insertSheet(name);
+  if (sheetCache_[name]) return sheetCache_[name];
+  if (!ss_) ss_ = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss_.getSheetByName(name);
+  if (!sheet) sheet = ss_.insertSheet(name);
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(cols);
     sheet.setFrozenRows(1);
   }
+  sheetCache_[name] = sheet;
   return sheet;
 }
 
 function findRow_(id) {
-  if (!id) return null;
   var sheet = getSheet_();
-  var ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
-  for (var r = 1; r < ids.length; r++) {
-    if (String(ids[r][0]) === String(id)) {
-      var rowIndex = r + 1; // 1-based
-      var rowValues = sheet.getRange(rowIndex, 1, 1, COLUMNS.length).getValues()[0];
-      var task = {};
-      for (var c = 0; c < COLUMNS.length; c++) {
-        task[COLUMNS[c]] = rowValues[c] != null ? String(rowValues[c]) : '';
-      }
-      return { sheet: sheet, rowIndex: rowIndex, task: task };
-    }
-  }
-  return null;
-}
-
-// 任意シートを id(1列目) で検索し、見つかれば列名→値のオブジェクトを返す（冪等チェック用）
-function findRowObj_(sheet, cols, id) {
-  var last = sheet.getLastRow();
-  if (last < 2 || !id) return null;
-  var vals = sheet.getRange(2, 1, last - 1, cols.length).getValues();
-  for (var r = 0; r < vals.length; r++) {
-    if (String(vals[r][0]) === String(id)) {
-      var o = {};
-      for (var c = 0; c < cols.length; c++) {
-        var v = vals[r][c];
-        o[cols[c]] = (v instanceof Date) ? Utilities.formatDate(v, TIMEZONE, 'yyyy/MM/dd HH:mm:ss') : (v != null ? String(v) : '');
-      }
-      return o;
-    }
-  }
-  return null;
+  var hit = findById_(sheet, COLUMNS, id);
+  return hit ? { sheet: sheet, rowIndex: hit.rowIndex, task: hit.obj } : null;
 }
 
 function writeRow_(sheet, rowIndex, task) {
