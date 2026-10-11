@@ -4,7 +4,7 @@
 
   var CFG = window.APP_CONFIG || {};
   // アプリのバージョン（確認先タブ下部に表示）。端末が古いコードを掴んでいないか確認用。
-  var APP_VERSION = '2026-10-11';
+  var APP_VERSION = '2026-10-11b';
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
@@ -109,7 +109,9 @@
   // ================= API =================
   // 電波が弱いと fetch が延々と終わらないことがある。一定時間で打ち切って
   // 「失敗」として扱い、未送信キューの再送に回す（内容は端末に残っているので消えない）。
-  var API_TIMEOUT = 20000; // ms
+  // ※ GAS(サーバー)はコールドスタート等で1回の応答に30秒近くかかることがあるため、
+  //   短すぎると正常な通信まで打ち切って無駄な再送が増える。45秒まで待つ。
+  var API_TIMEOUT = 45000; // ms
   function fetchWithTimeout(url, opts) {
     if (typeof AbortController === 'undefined') return fetch(url, opts); // 古い端末は従来動作
     var ctrl = new AbortController();
