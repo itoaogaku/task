@@ -56,6 +56,7 @@ function doPost(e) {
 }
 
 function handle_(e, params) {
+  var t0 = Date.now(); // GAS内の処理時間を計測（アプリの確認先タブに表示する診断用）
   try {
     // トークン検証
     if (String(params.token || '') !== String(SHARED_TOKEN)) {
@@ -81,7 +82,7 @@ function handle_(e, params) {
       default:
         return json_({ ok: false, error: 'unknown action: ' + action });
     }
-    return json_({ ok: true, data: result });
+    return json_({ ok: true, data: result, ms: Date.now() - t0 });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }

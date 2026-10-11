@@ -4,7 +4,7 @@
 
   var CFG = window.APP_CONFIG || {};
   // アプリのバージョン（確認先タブ下部に表示）。端末が古いコードを掴んでいないか確認用。
-  var APP_VERSION = '2026-10-11c';
+  var APP_VERSION = '2026-10-11d';
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
@@ -128,16 +128,23 @@
     payload = payload || {};
     payload.action = action;
     payload.token = CFG.TOKEN;
+    var t0 = Date.now();
+    var req;
 
     if (action === 'list') {
       var url = CFG.API_URL + '?action=list&token=' + encodeURIComponent(CFG.TOKEN);
-      return fetchWithTimeout(url, { method: 'GET' }).then(parseRes);
+      req = fetchWithTimeout(url, { method: 'GET' });
+    } else {
+      req = fetchWithTimeout(CFG.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
     }
-    return fetchWithTimeout(CFG.API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    }).then(parseRes);
+    return req.then(parseRes).then(function (data) {
+      recordDiag(action === 'list' ? 'list' : 'save', Date.now() - t0, data.ms);
+      return data.data;
+    });
   }
 
   function parseRes(res) {
@@ -145,8 +152,15 @@
       var data;
       try { data = JSON.parse(t); } catch (e) { throw new Error('サーバー応答が不正です'); }
       if (!data.ok) throw new Error(data.error || '不明なエラー');
-      return data.data;
+      return data;
     });
+  }
+
+  // ---- 通信の診断（どこで時間がかかっているかを確認先タブに表示） ----
+  // total = 端末から見た往復時間 / server = GAS内の処理時間（GASが返す ms）
+  var diag = { list: null, save: null };
+  function recordDiag(kind, total, serverMs) {
+    diag[kind] = { total: total, server: (typeof serverMs === 'number') ? serverMs : null };
   }
 
   // ================= ローディング / トースト =================
@@ -580,14 +594,28 @@
     appendVersion();
   }
 
-  // バージョン表示（端末が最新コードを読めているかの確認用）
+  // バージョン表示＋通信の診断（端末が最新コードか・どこで時間がかかっているかの確認用）
   function appendVersion() {
+    var sec = function (ms) { return (ms / 1000).toFixed(1) + '秒'; };
+    var fmt = function (d) {
+      if (!d) return '未計測';
+      return sec(d.total) + '（サーバー処理 ' + (d.server == null ? '不明' : sec(d.server)) + '）';
+    };
+    var done = state.tasks.filter(function (t) { return t.status === 'done'; }).length;
+    var lines = [
+      'バージョン ' + APP_VERSION,
+      '読み込み: ' + fmt(diag.list),
+      '保存: ' + fmt(diag.save),
+      'データ: タスク' + state.tasks.length + '件（未完了' + (state.tasks.length - done) + '・完了' + done +
+        '）／保管' + state.archive.length + '件／メモ' + state.memos.length + '件'
+    ];
     var v = document.createElement('div');
     v.className = 'field-label';
     v.style.textAlign = 'center';
     v.style.opacity = '0.6';
     v.style.marginTop = '16px';
-    v.textContent = 'バージョン ' + APP_VERSION;
+    v.style.whiteSpace = 'pre-line';
+    v.textContent = lines.join('\n');
     $list.appendChild(v);
   }
 
