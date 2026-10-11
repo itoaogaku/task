@@ -4,7 +4,7 @@
 
   var CFG = window.APP_CONFIG || {};
   // アプリのバージョン（確認先タブ下部に表示）。端末が古いコードを掴んでいないか確認用。
-  var APP_VERSION = '2026-10-11b';
+  var APP_VERSION = '2026-10-11c';
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
@@ -1051,6 +1051,21 @@
       }));
     } catch (e) { /* noop */ }
   }
+  // 現在表示中の「サーバー確定済み」データをキャッシュに保存する。
+  // 追加や編集が成功した直後に呼ぶことで、次に開いたとき（list取得が遅い/失敗しても）
+  // 直前に入れた内容がすぐ表示される。未送信(pending)はキャッシュに入れない
+  // （送信前は outbox が保持し、applyListData で復元されるため）。
+  function cacheConfirmedState() {
+    try {
+      var notPending = function (x) { return !x.pending; };
+      localStorage.setItem(CACHE_STORE, JSON.stringify({
+        tasks: state.tasks.filter(notPending),
+        archive: state.archive.filter(notPending),
+        memos: state.memos.filter(notPending),
+        assignees: state.assigneeOptions || []
+      }));
+    } catch (e) { /* noop */ }
+  }
 
   function load() {
     // 1) 前回のキャッシュがあれば即表示（体感を速く）。裏で最新を取得して差し替える。
@@ -1222,6 +1237,8 @@
     }
     // 保管が当日等で自動タスク化された分を取り込む（既存・未送信は消さない）
     if (type === 'archive') mergeNewTasks(d && (d.newTasks || d.tasks));
+    // 送信成功＝サーバー確定。すぐキャッシュに反映し、次に開いた瞬間から表示されるようにする
+    cacheConfirmedState();
   }
   // 追加が届いた時点の内容と画面上の内容が違えば（送信中の編集・完了）、その差分を続けて送る
   function reconcileAfterAdd(type, local, real) {
@@ -1344,6 +1361,7 @@
     var idx = state.tasks.map(function (x) { return x.id; }).indexOf(task.id);
     if (idx >= 0) state.tasks[idx] = task; else state.tasks.unshift(task);
     render();
+    cacheConfirmedState(); // 編集/完了の確定もキャッシュへ反映
   }
 
   function nowLocal() {
