@@ -4,7 +4,7 @@
 
   var CFG = window.APP_CONFIG || {};
   // アプリのバージョン（確認先タブ下部に表示）。端末が古いコードを掴んでいないか確認用。
-  var APP_VERSION = '2026-10-11e';
+  var APP_VERSION = '2026-10-11f';
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
@@ -164,26 +164,43 @@
         });
       }
     }
-    return req.then(parseRes).then(function (data) {
-      recordDiag(action === 'list' ? 'list' : 'save', Date.now() - t0, data.ms, via);
+    var idle = idleMinutes(t0), tHead = 0, size = 0;
+    return req.then(function (res) {
+      tHead = Date.now();                       // 返事（ヘッダ）が届いた時刻
+      return res.text();
+    }).then(function (t) {
+      size = t.length;
+      var data = parseRes(t);
+      markApiTime();
+      recordDiag(action === 'list' ? 'list' : 'save', {
+        total: Date.now() - t0, head: tHead - t0, body: Date.now() - tHead,
+        server: data.ms, via: via, kb: size / 1024, idle: idle
+      });
       return data.data;
     });
   }
 
-  function parseRes(res) {
-    return res.text().then(function (t) {
-      var data;
-      try { data = JSON.parse(t); } catch (e) { throw new Error('サーバー応答が不正です'); }
-      if (!data.ok) throw new Error(data.error || '不明なエラー');
-      return data;
-    });
+  function parseRes(t) {
+    var data;
+    try { data = JSON.parse(t); } catch (e) { throw new Error('サーバー応答が不正です'); }
+    if (!data.ok) throw new Error(data.error || '不明なエラー');
+    return data;
   }
 
   // ---- 通信の診断（どこで時間がかかっているかを確認先タブに表示） ----
-  // total = 端末から見た往復時間 / server = GAS内の処理時間（GASが返す ms）
-  var diag = { list: null, save: null };
-  function recordDiag(kind, total, serverMs, via) {
-    diag[kind] = { total: total, server: (typeof serverMs === 'number') ? serverMs : null, via: via };
+  // total = 往復時間 / head = 返事が届くまで / body = データ受信 / server = GAS内の処理時間
+  // idle = 前回の通信から何分空いていたか（サーバーの起動待ちの判定用）
+  var LAST_API_STORE = 'task_last_api_at';
+  function idleMinutes(now) {
+    try { var s = +localStorage.getItem(LAST_API_STORE); if (s) return (now - s) / 60000; } catch (e) { /* noop */ }
+    return null;
+  }
+  function markApiTime() { try { localStorage.setItem(LAST_API_STORE, String(Date.now())); } catch (e) { /* noop */ } }
+  var diag = { listFirst: null, list: null, save: null };
+  function recordDiag(kind, d) {
+    if (typeof d.server !== 'number') d.server = null;
+    if (kind === 'list' && !diag.listFirst) diag.listFirst = d; // 起動して最初の読み込みは別に残す
+    diag[kind] = d;
   }
 
   // ================= ローディング / トースト =================
@@ -624,10 +641,18 @@
       if (!d) return '未計測';
       return sec(d.total) + '（サーバー処理 ' + (d.server == null ? '不明' : sec(d.server)) + '）';
     };
+    // 読み込みは内訳まで出す：返事待ち（サーバー起動待ち含む）／受信（データ量）
+    var fmtList = function (d) {
+      if (!d) return '未計測';
+      return sec(d.total) + '\n　返事待ち ' + sec(d.head) + '・受信 ' + sec(d.body) + '（' + Math.round(d.kb) + 'KB）' +
+        '\n　サーバー処理 ' + (d.server == null ? '不明' : sec(d.server)) +
+        '・前回の通信から' + (d.idle == null ? '不明' : Math.round(d.idle) + '分');
+    };
     var done = state.tasks.filter(function (t) { return t.status === 'done'; }).length;
     var lines = [
       'バージョン ' + APP_VERSION,
-      '読み込み: ' + fmt(diag.list),
+      '読み込み(起動時): ' + fmtList(diag.listFirst),
+      '読み込み(直近): ' + fmtList(diag.list),
       '保存' + (diag.save && diag.save.via ? '(' + diag.save.via + ')' : '') + ': ' + fmt(diag.save),
       'データ: タスク' + state.tasks.length + '件（未完了' + (state.tasks.length - done) + '・完了' + done +
         '）／保管' + state.archive.length + '件／メモ' + state.memos.length + '件'
