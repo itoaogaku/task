@@ -3,6 +3,8 @@
   'use strict';
 
   var CFG = window.APP_CONFIG || {};
+  // アプリのバージョン（確認先タブ下部に表示）。端末が古いコードを掴んでいないか確認用。
+  var APP_VERSION = '2026-10-11';
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
@@ -546,7 +548,7 @@
     card.appendChild(row);
     $list.appendChild(card);
 
-    if (!state.assigneeOptions.length) return;
+    if (!state.assigneeOptions.length) { appendVersion(); return; }
     var group = document.createElement('div');
     group.className = 'group';
     $list.appendChild(group);
@@ -572,6 +574,19 @@
       el.appendChild(main);
       group.appendChild(el);
     });
+
+    appendVersion();
+  }
+
+  // バージョン表示（端末が最新コードを読めているかの確認用）
+  function appendVersion() {
+    var v = document.createElement('div');
+    v.className = 'field-label';
+    v.style.textAlign = 'center';
+    v.style.opacity = '0.6';
+    v.style.marginTop = '16px';
+    v.textContent = 'バージョン ' + APP_VERSION;
+    $list.appendChild(v);
   }
 
   // ================= 保管（スクロールカレンダー 1/1〜12/31・年をまたいで統合） =================
