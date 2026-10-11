@@ -4,7 +4,7 @@
 
   var CFG = window.APP_CONFIG || {};
   // アプリのバージョン（確認先タブ下部に表示）。端末が古いコードを掴んでいないか確認用。
-  var APP_VERSION = '2026-10-11d';
+  var APP_VERSION = '2026-10-11e';
   var PRIORITIES = CFG.PRIORITIES || [
     { key: 'l', label: 'L', color: '#34c759' },
     { key: 's', label: 'S', color: '#ff3b30' },
@@ -124,25 +124,48 @@
     );
   }
 
+  // 保存も GET で送る。GAS は POST の返事を別サーバー経由で返すため、
+  // 処理は1秒で終わっていても返事がスマホに届くまで10秒以上かかることがある（実測）。
+  // GAS の doGet は全アクションを受け付けるので、GAS 側の変更は不要。
+  // URL が長くなりすぎる長文（長いメモ等）だけは従来どおり POST で送る。
+  var GET_URL_LIMIT = 2000;
+  function getUrlFor(payload) {
+    var q = [];
+    Object.keys(payload).forEach(function (k) {
+      var v = payload[k];
+      if (v == null) return;
+      if (typeof v === 'object') v = JSON.stringify(v);   // 配列（確認先リスト等）
+      q.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(v)));
+    });
+    q.push('_=' + Date.now().toString(36));               // キャッシュ回避
+    return CFG.API_URL + '?' + q.join('&');
+  }
+
   function api(action, payload) {
     payload = payload || {};
     payload.action = action;
     payload.token = CFG.TOKEN;
     var t0 = Date.now();
-    var req;
+    var req, via = 'GET';
 
     if (action === 'list') {
       var url = CFG.API_URL + '?action=list&token=' + encodeURIComponent(CFG.TOKEN);
       req = fetchWithTimeout(url, { method: 'GET' });
     } else {
-      req = fetchWithTimeout(CFG.API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      });
+      var getUrl = getUrlFor(payload);
+      if (getUrl.length <= GET_URL_LIMIT) {
+        req = fetchWithTimeout(getUrl, { method: 'GET' });
+      } else {
+        via = 'POST';
+        req = fetchWithTimeout(CFG.API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+      }
     }
     return req.then(parseRes).then(function (data) {
-      recordDiag(action === 'list' ? 'list' : 'save', Date.now() - t0, data.ms);
+      recordDiag(action === 'list' ? 'list' : 'save', Date.now() - t0, data.ms, via);
       return data.data;
     });
   }
@@ -159,8 +182,8 @@
   // ---- 通信の診断（どこで時間がかかっているかを確認先タブに表示） ----
   // total = 端末から見た往復時間 / server = GAS内の処理時間（GASが返す ms）
   var diag = { list: null, save: null };
-  function recordDiag(kind, total, serverMs) {
-    diag[kind] = { total: total, server: (typeof serverMs === 'number') ? serverMs : null };
+  function recordDiag(kind, total, serverMs, via) {
+    diag[kind] = { total: total, server: (typeof serverMs === 'number') ? serverMs : null, via: via };
   }
 
   // ================= ローディング / トースト =================
@@ -605,7 +628,7 @@
     var lines = [
       'バージョン ' + APP_VERSION,
       '読み込み: ' + fmt(diag.list),
-      '保存: ' + fmt(diag.save),
+      '保存' + (diag.save && diag.save.via ? '(' + diag.save.via + ')' : '') + ': ' + fmt(diag.save),
       'データ: タスク' + state.tasks.length + '件（未完了' + (state.tasks.length - done) + '・完了' + done +
         '）／保管' + state.archive.length + '件／メモ' + state.memos.length + '件'
     ];
